@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+*.tmp
+*.log
+.buildozer/
+bin/
+*.apk
+venv/
+.venv/
