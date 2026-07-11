@@ -29,13 +29,16 @@ jobs:
           python3 -m pip install --upgrade pip setuptools wheel
           pip install Cython==0.29.33 virtualenv buildozer
 
-      - name: Pre-accept Android SDK license
+      - name: Download Android SDK/NDK tools (first pass)
+        run: |
+          buildozer android debug 2>&1 || true
+
+      - name: Accept Android SDK licenses
         run: |
           SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
-          mkdir -p "$SDK_DIR/licenses"
-          echo "8933bad161af4178b1185d1a37fbf41ea5269c55" > "$SDK_DIR/licenses/android-sdk-license"
+          yes | "$SDK_DIR/tools/bin/sdkmanager" --sdk_root="$SDK_DIR" --licenses || true
 
-      - name: Create GL compatibility header in NDK
+      - name: Create GL compatibility header in NDK + clean build state
         run: |
           NDK_SYSROOT="$HOME/.buildozer/android/platform/android-ndk-r25b/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
           mkdir -p "$NDK_SYSROOT/GL"
@@ -45,6 +48,8 @@ jobs:
           #include <GLES2/gl2.h>
           #endif
           GLHEADER
+          # Clean partial build artifacts from first pass
+          rm -rf .buildozer/android/platform/build-arm64-v8a
 
       - name: Build APK
         run: |
