@@ -1,12 +1,21 @@
-import tkinter as tk
-from tkinter import ttk, messagebox
+try:
+    import tkinter as tk
+    from tkinter import ttk, messagebox
+except ImportError:
+    tk = None
+    ttk = None
+    messagebox = None
 import random
 import time
 import json
 import os
 from datetime import datetime
 import threading
-from PIL import Image, ImageTk
+from PIL import Image
+try:
+    from PIL import ImageTk
+except ImportError:
+    ImageTk = None
 
 # ==========================================    
 # 导入配置模块
