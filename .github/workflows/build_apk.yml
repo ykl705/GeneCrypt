@@ -26,9 +26,8 @@ jobs:
 
       - name: Install Python packages
         run: |
-          python3 -m pip install --upgrade pip
+          python3 -m pip install --upgrade pip setuptools wheel
           pip install Cython==0.29.33 virtualenv buildozer
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       - name: Download Android SDK tools (first pass, will fail on license)
         run: |
