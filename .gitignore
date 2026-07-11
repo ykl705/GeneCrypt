@@ -8,3 +8,16 @@ bin/
 *.apk
 venv/
 .venv/
+nul
+*.log
+*.zip
+builds.json
+jobs.json
+artifacts.json
+art.json
+run.json
+raw_log.txt
+build_log.txt
+final_log.txt
+build11_log.txt
+gl_redirect.h

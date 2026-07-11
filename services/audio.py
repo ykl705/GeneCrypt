@@ -1,5 +1,8 @@
 import os
-from kivy.core.audio import SoundLoader
+try:
+    from kivy.core.audio import SoundLoader
+except ImportError:
+    SoundLoader = None
 
 _sounds = {}
 

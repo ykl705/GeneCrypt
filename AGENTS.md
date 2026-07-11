@@ -62,6 +62,14 @@ python -c "import sys; sys.path.insert(0,'.'); import gene_config as gc, gene_en
 - Methods: `_show_tech_tooltip(event, tech_name)` / `_hide_tech_tooltip()`
 - Bound via `canvas.tag_bind` `<Enter>`/`<Leave>` on `node_{tech_name}` tags in `_redraw_tech_tree`
 
+## GitHub Actions Build (Final Successful)
+- **Build #10** (b09bce6) succeeded after fixing linker error `unable to find library -lGL`
+- Root cause: Kivy's `cgl_gl`/`cgl_glew` backends hardcode `-lGL` (desktop OpenGL), not available in Android NDK
+- Fix: Create `libGL.so -> libGLESv2.so` symlink in NDK sysroot `usr/lib/aarch64-linux-android/21/`
+- Also required: `GL/gl.h` and `GL/glext.h` compat headers pointing to GLES2 equivalents
+- `__USE_OPENGL_ES2=1` is passed via CFLAGS but Kivy's `config.h` defines it to `0` — command-line `-D` flag takes precedence
+- APK: `genecrypt-0.1.0-arm64-v8a-debug.apk` (~34MB), available as GitHub Actions artifact
+
 ## Known Issues
 - `_optimize_genome` is a **complete no-op** — `STAT_ENHANCE_REGIONS` start positions (120+) are beyond all gene region ends (max 120 on chr1/chr2, 191 on chr3, 70 on chrX). Both `_optimize_genome` and `_apply_genome_enhancements` read/write only padding (random bases), never actual gene data. Not called for reward cards anymore.
 - `calculate_traits` uses `sum(ord(b)) % range + min` which is effectively pseudo-random per-instance — quality has no effect on normal card stats. Bred/created cards still use this system.

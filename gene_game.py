@@ -11,7 +11,10 @@ import json
 import os
 from datetime import datetime
 import threading
-from PIL import Image
+try:
+    from PIL import Image
+except ImportError:
+    Image = None
 try:
     from PIL import ImageTk
 except ImportError:
