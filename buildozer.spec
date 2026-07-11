@@ -18,7 +18,7 @@ android.sdk = 33
 android.gradle_dependencies = androidx.core:core:1.9.0
 android.wakelock = False
 android.permissions = INTERNET
-android.arch = arm64-v8a
+android.archs = arm64-v8a
 android.manifest = <uses-feature android:glEsVersion="0x00020000" android:required="true" />
 android.allow_backup = True
 android.keystore =
