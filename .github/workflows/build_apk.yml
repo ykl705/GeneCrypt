@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,7 +22,7 @@ jobs:
         uses: digreatbrian/buildozer-action@v1
         with:
           workdir: .
-          specfile: buildozer.spec
+          python-version: 3.8
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
