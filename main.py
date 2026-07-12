@@ -3,6 +3,19 @@ import sys
 import traceback
 
 # ==========================================
+# 早期诊断日志 —— /data/local/tmp/ 永远可写
+# ==========================================
+_DBG = lambda m: None
+try:
+    _dbg_path = '/data/local/tmp/genecrypt_debug.log'
+    with open(_dbg_path, 'w') as _f:
+        _f.write('=== genecrypt debug start ===\n')
+    _DBG = lambda m: open(_dbg_path, 'a').write(str(m) + '\n')
+    _DBG('1: early debug ready')
+except Exception:
+    pass
+
+# ==========================================
 # 全局未捕获异常处理器 —— 闪退时直接弹窗显示
 # ==========================================
 _CRASH_LOG_PATH = os.environ.get('ANDROID_PRIVATE', None)
@@ -10,6 +23,7 @@ if _CRASH_LOG_PATH:
     _CRASH_LOG_PATH = os.path.join(_CRASH_LOG_PATH, 'genecrypt_crash.log')
 else:
     _CRASH_LOG_PATH = 'crash.log'
+_DBG(f'2: crash path = {_CRASH_LOG_PATH}')
 
 def _write_crash_log(msg):
     try:
@@ -20,8 +34,22 @@ def _write_crash_log(msg):
     print(f'[GENECRYPT] {msg}', file=sys.stderr)
 
 def _show_crash_dialog(msg):
-    """在屏幕上显示崩溃信息：PyJNIus原生弹窗 → Kivy备选"""
-    full_msg = f'{msg}\n\n日志已保存到:\n{_CRASH_LOG_PATH}'
+    """4次尝试：SDL2 MessageBox → pyjnius → Kivy → /data/local/tmp/"""
+    full_msg = f'{msg}\n\n日志: {_CRASH_LOG_PATH}'
+
+    # 方法1: SDL2 MessageBox (ctypes, 不依赖任何Python库)
+    try:
+        import ctypes
+        sdl2 = ctypes.cdll.LoadLibrary('libSDL2.so')
+        sdl2.SDL_ShowSimpleMessageBox.argtypes = [ctypes.c_uint32, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p]
+        sdl2.SDL_ShowSimpleMessageBox.restype = ctypes.c_int
+        short = (full_msg[:1000] + '...') if len(full_msg) > 1000 else full_msg
+        sdl2.SDL_ShowSimpleMessageBox(0, b'GeneCrypt Error', short.encode('utf-8'), None)
+        return
+    except Exception as e:
+        _write_crash_log(f'SDL2 dialog fail: {e}')
+
+    # 方法2: PyJNIus
     try:
         from jnius import autoclass
         PythonActivity = autoclass('org.kivy.android.PythonActivity')
@@ -35,8 +63,10 @@ def _show_crash_dialog(msg):
             d = Builder.create()
             d.show()
             return
-    except Exception:
-        pass
+    except Exception as e:
+        _write_crash_log(f'JNIus dialog fail: {e}')
+
+    # 方法3: Kivy CrashApp
     try:
         from kivy.app import App
         from kivy.uix.screenmanager import Screen
@@ -62,6 +92,14 @@ def _show_crash_dialog(msg):
             def build(self):
                 return _CrashScreen(error_msg=msg)
         _CrashApp().run()
+        return
+    except Exception as e:
+        _write_crash_log(f'Kivy dialog fail: {e}')
+
+    # 方法4: 最后手段 — /data/local/tmp/
+    try:
+        with open('/data/local/tmp/genecrypt_crash_last.txt', 'w') as f:
+            f.write(full_msg)
     except Exception:
         pass
 
@@ -70,7 +108,6 @@ _original_excepthook = sys.excepthook
 def _global_excepthook(exc_type, exc_value, exc_tb):
     msg = ''.join(traceback.format_exception(exc_type, exc_value, exc_tb))
     _write_crash_log(msg)
-    # 额外写到 /sdcard/，文件管理器可直接看到
     try:
         sdcard = os.environ.get('EXTERNAL_STORAGE', '/sdcard')
         with open(os.path.join(sdcard, 'genecrypt_crash.log'), 'a') as f:
@@ -79,7 +116,9 @@ def _global_excepthook(exc_type, exc_value, exc_tb):
         pass
     _show_crash_dialog(msg)
 sys.excepthook = _global_excepthook
+_DBG('3: excepthook set')
 
+_DBG('4: startup')
 _write_crash_log('=== GeneCrypt Startup ===')
 
 # ==========================================

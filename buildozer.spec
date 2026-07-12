@@ -8,7 +8,7 @@ source.exclude_exts = spec,txt
 source.exclude_dirs = tests, __pycache__, temp_check, .github, assets/enemies, assets/effects
 source.exclude_patterns = buildozer.spec,requirements.txt,*.md,*.zip,*.log,gene_game_desktop.py,legacy_gui.py,services/sprite_composer.py
 version = 0.1.1
-requirements = python3,kivy>=2.2.0,pillow>=9.0.0
+requirements = python3,kivy>=2.2.0,pillow>=9.0.0,pyjnius
 orientation = landscape
 fullscreen = 0
 android.api = 33
