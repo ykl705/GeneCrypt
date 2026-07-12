@@ -6,13 +6,15 @@ import traceback
 # 全局未捕获异常处理器 —— 闪退时直接弹窗显示
 # ==========================================
 _CRASH_LOG_PATH = None
-try:
-    _CRASH_LOG_PATH = os.environ.get('EXTERNAL_STORAGE', '/storage/emulated/0')
-    _CRASH_LOG_PATH = os.path.join(_CRASH_LOG_PATH, 'genecrypt_crash.log')
-except Exception:
-    _CRASH_LOG_PATH = 'crash.log'
 
 def _write_crash_log(msg):
+    global _CRASH_LOG_PATH
+    if _CRASH_LOG_PATH is None:
+        app = App.get_running_app() if 'App' in dir() else None
+        if app is not None:
+            _CRASH_LOG_PATH = os.path.join(app.user_data_dir, 'genecrypt_crash.log')
+        else:
+            _CRASH_LOG_PATH = 'crash.log'
     try:
         with open(_CRASH_LOG_PATH, 'a') as f:
             f.write(msg + '\n')

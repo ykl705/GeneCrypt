@@ -153,7 +153,7 @@ class CardLibraryScreen(Screen):
                 genome = h.get('genome', '')[:60]
                 dom = h.get('is_dominant', {})
                 inner.add_widget(Label(text=f'  同源{i+1}: {genome}...', size_hint_y=None, height=dp(25),
-                                       font_name='Consolas', color=(0.6, 0.6, 0.6, 1)))
+                                        color=(0.6, 0.6, 0.6, 1)))
         for gname, gdata in card.genes.items():
             a1d = gdata.get('allele1', {}).get('is_dominant', False)
             a2d = gdata.get('allele2', {}).get('is_dominant', False)

@@ -102,25 +102,25 @@ class GeneEngineeringScreen(Screen):
         try:
             if op == 'cut':
                 pos = int(arg1) if arg1 else 0
-                result = app.game.restrict_enzyme_cut(card, pos)
+                result = app.game.restrict_enzyme_cut(arg2 if arg2 else card.genes.get('gene1', {}).get('name', ''), pos, card)
             elif op == 'methyl':
-                result = app.game.methylation(card, arg2 if arg2 else None)
+                result = app.game.methylation(arg2 if arg2 else None, card)
             elif op == 'radiate':
                 result = app.game.radiation_mutation(card)
             elif op == 'knockout':
-                result = app.game.gene_knockout(card, arg2 if arg2 else None)
+                result = app.game.gene_knockout(arg2 if arg2 else None, card)
             elif op == 'splice':
-                result = app.game.splice_gene(card)
+                result = app.game.splice_gene(arg2 if arg2 else None, card, card)
             elif op == 'crispr':
                 pos = int(arg1) if arg1 else 0
                 base = arg2.upper() if arg2 and arg2.upper() in 'ATGC' else None
-                result = app.game.crispr_edit(card, pos, base)
+                result = app.game.crispr_edit(base or '', card, pos, base)
             elif op == 'activate':
-                result = app.game.activate_gene(card, arg2 if arg2 else None)
+                result = app.game.activate_gene(arg2 if arg2 else None, card)
             elif op == 'isolate':
-                result = app.game.toggle_gene_isolation(card, arg2 if arg2 else None)
+                result = app.game.toggle_gene_isolation(arg2 if arg2 else None, card)
             elif op == 'duplicate':
-                result = app.game.duplicate_chromosome(card, arg2 if arg2 else None)
+                result = app.game.duplicate_chromosome(arg2 if arg2 else None, card, card)
         except Exception as e:
             from kivy.uix.popup import Popup
             popup = Popup(title='操作失败', content=Label(text=str(e)), size_hint=(0.5, 0.3))
