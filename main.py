@@ -20,8 +20,8 @@ def _write_crash_log(msg):
     print(f'[GENECRYPT] {msg}', file=sys.stderr)
 
 def _show_crash_dialog(msg):
-    """三次尝试在屏幕上显示崩溃信息：PyJNIus → Kivy → 放弃"""
-    full_msg = f'{msg}\n\n日志文件:\n{_CRASH_LOG_PATH}'
+    """在屏幕上显示崩溃信息：PyJNIus原生弹窗 → Kivy备选"""
+    full_msg = f'{msg}\n\n日志已保存到:\n{_CRASH_LOG_PATH}'
     try:
         from jnius import autoclass
         PythonActivity = autoclass('org.kivy.android.PythonActivity')
@@ -70,6 +70,13 @@ _original_excepthook = sys.excepthook
 def _global_excepthook(exc_type, exc_value, exc_tb):
     msg = ''.join(traceback.format_exception(exc_type, exc_value, exc_tb))
     _write_crash_log(msg)
+    # 额外写到 /sdcard/，文件管理器可直接看到
+    try:
+        sdcard = os.environ.get('EXTERNAL_STORAGE', '/sdcard')
+        with open(os.path.join(sdcard, 'genecrypt_crash.log'), 'a') as f:
+            f.write(msg + '\n')
+    except Exception:
+        pass
     _show_crash_dialog(msg)
 sys.excepthook = _global_excepthook
 
