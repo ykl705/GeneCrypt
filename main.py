@@ -19,12 +19,58 @@ def _write_crash_log(msg):
         pass
     print(f'[GENECRYPT] {msg}', file=sys.stderr)
 
+def _show_crash_dialog(msg):
+    """三次尝试在屏幕上显示崩溃信息：PyJNIus → Kivy → 放弃"""
+    full_msg = f'{msg}\n\n日志文件:\n{_CRASH_LOG_PATH}'
+    try:
+        from jnius import autoclass
+        PythonActivity = autoclass('org.kivy.android.PythonActivity')
+        AlertDialog = autoclass('android.app.AlertDialog')
+        activity = PythonActivity.mActivity
+        if activity:
+            Builder = AlertDialog.Builder(activity)
+            Builder.setTitle('基因密码 - 启动错误')
+            Builder.setMessage(full_msg)
+            Builder.setPositiveButton('关闭', None)
+            d = Builder.create()
+            d.show()
+            return
+    except Exception:
+        pass
+    try:
+        from kivy.app import App
+        from kivy.uix.screenmanager import Screen
+        from kivy.uix.textinput import TextInput
+        from kivy.uix.button import Button
+        from kivy.uix.boxlayout import BoxLayout
+        from kivy.uix.label import Label
+        class _CrashScreen(Screen):
+            def __init__(self, error_msg, **kw):
+                super().__init__(**kw)
+                layout = BoxLayout(orientation='vertical', padding=20, spacing=10)
+                layout.add_widget(Label(text='[b]基因密码 - 启动错误[/b]', markup=True,
+                                        size_hint_y=0.1, color=(1,0.3,0.3,1)))
+                layout.add_widget(Label(text=f'日志: {_CRASH_LOG_PATH}',
+                                        size_hint_y=0.1, color=(1,1,1,0.7)))
+                txt = TextInput(text=error_msg, readonly=True, font_size=12)
+                layout.add_widget(txt)
+                btn = Button(text='关闭', size_hint_y=0.1)
+                btn.bind(on_press=lambda x: App.get_running_app().stop())
+                layout.add_widget(btn)
+                self.add_widget(layout)
+        class _CrashApp(App):
+            def build(self):
+                return _CrashScreen(error_msg=msg)
+        _CrashApp().run()
+    except Exception:
+        pass
+
 # 设置全局异常钩子
 _original_excepthook = sys.excepthook
 def _global_excepthook(exc_type, exc_value, exc_tb):
     msg = ''.join(traceback.format_exception(exc_type, exc_value, exc_tb))
     _write_crash_log(msg)
-    print(f'[GENECRYPT_CRASH] {msg}', file=sys.stderr)
+    _show_crash_dialog(msg)
 sys.excepthook = _global_excepthook
 
 _write_crash_log('=== GeneCrypt Startup ===')
@@ -91,32 +137,6 @@ try:
 except Exception as e:
     _write_crash_log(f'Service import error: {e}\n{traceback.format_exc()}')
     raise
-
-
-class ErrorPopup(Screen):
-    """显示崩溃信息的全屏页面"""
-    def __init__(self, error_msg, **kw):
-        super().__init__(**kw)
-        from kivy.uix.label import Label
-        from kivy.uix.textinput import TextInput
-        from kivy.uix.button import Button
-        from kivy.uix.boxlayout import BoxLayout
-        layout = BoxLayout(orientation='vertical', padding=20, spacing=10)
-        title = Label(text='[b]基因密码 - 启动错误[/b]', markup=True,
-                      size_hint_y=0.1, color=(1,0.3,0.3,1))
-        info = Label(text=f'错误已保存到:\n{_CRASH_LOG_PATH}',
-                     size_hint_y=0.1, color=(1,1,1,0.7))
-        txt = TextInput(text=error_msg, readonly=True,
-                        background_color=(0.15,0.15,0.25,1),
-                        foreground_color=(1,0.3,0.3,1), font_size=12)
-        btn = Button(text='关闭', size_hint_y=0.1,
-                     background_color=(0.3,0.3,0.5,1))
-        btn.bind(on_press=lambda x: App.get_running_app().stop())
-        layout.add_widget(title)
-        layout.add_widget(info)
-        layout.add_widget(txt)
-        layout.add_widget(btn)
-        self.add_widget(layout)
 
 
 class GeneCryptApp(App):
@@ -206,12 +226,5 @@ if __name__ == '__main__':
     except Exception as e:
         err_msg = traceback.format_exc()
         _write_crash_log(f'App run error: {err_msg}')
-        # Try to show error on screen via Kivy
-        try:
-            class CrashApp(App):
-                def build(self):
-                    return ErrorPopup(err_msg)
-            CrashApp().run()
-        except Exception:
-            pass
+        _show_crash_dialog(err_msg)
         raise
