@@ -1,16 +1,17 @@
 import os
 import sys
 import traceback
+from kivy.utils import platform
+from kivy.lang import Builder
 
-# Log startup errors to a file for Android debugging
-_CRASH_LOG = None
-try:
-    _CRASH_LOG = open('/sdcard/genecrypt_crash.log', 'w')
-except Exception:
-    try:
-        _CRASH_LOG = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'crash.log'), 'w')
-    except Exception:
-        pass
+# 日志文件放在应用私有目录
+if platform == 'android':
+    from android.storage import app_storage_path
+    CRASH_LOG_PATH = os.path.join(app_storage_path(), 'crash.log')
+else:
+    CRASH_LOG_PATH = 'crash.log'
+
+_CRASH_LOG = open(CRASH_LOG_PATH, 'w')
 
 def _log_error(msg):
     if _CRASH_LOG:
@@ -19,6 +20,7 @@ def _log_error(msg):
 
 _log_error('=== GeneCrypt Startup ===')
 
+# Kivy 配置
 try:
     from kivy.config import Config
     Config.set('graphics', 'width', '1400')
@@ -28,6 +30,7 @@ try:
 except Exception as e:
     _log_error(f'Config error: {e}')
 
+# 导入 Kivy 模块
 try:
     from kivy.app import App
     from kivy.uix.screenmanager import ScreenManager, Screen
@@ -45,9 +48,10 @@ except Exception as e:
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# 导入自定义模块
 try:
-    from gene_game import Game, Card
-    _log_error('Imported Game, Card OK')
+    from gene_game import Game, Card, QUEST_DEFINITIONS
+    _log_error('Imported gene_game OK')
 except Exception as e:
     _log_error(f'gene_game import error: {e}\n{traceback.format_exc()}')
     raise
@@ -76,8 +80,6 @@ except Exception as e:
 
 
 class GeneCryptApp(App):
-    QUEST_DEFINITIONS = None
-
     def __init__(self):
         super().__init__()
         _log_error('App.__init__ start')
@@ -92,6 +94,32 @@ class GeneCryptApp(App):
 
     def build(self):
         _log_error('App.build() start')
+        
+        # 🔥 关键修复：加载 KV 文件
+        try:
+            # 加载主 KV（如果存在）
+            if os.path.exists('main.kv'):
+                Builder.load_file('main.kv')
+                _log_error('main.kv loaded')
+            
+            # 加载 screens 目录下的 KV 文件
+            kv_files = [
+                'screens/quest.kv',
+                'screens/battle.kv',
+                'screens/bestiary.kv',
+                'screens/card_library.kv',
+                'screens/gacha.kv',
+                'screens/breeding_lab.kv',
+                'screens/gene_engineering.kv',
+                'screens/tech_tree.kv',
+            ]
+            for kv_file in kv_files:
+                if os.path.exists(kv_file):
+                    Builder.load_file(kv_file)
+                    _log_error(f'Loaded: {kv_file}')
+        except Exception as e:
+            _log_error(f'KV loading error: {e}\n{traceback.format_exc()}')
+
         try:
             Window.clearcolor = (0.1, 0.1, 0.18, 1)
         except Exception as e:
@@ -103,12 +131,11 @@ class GeneCryptApp(App):
             _log_error(f'preload_sounds error: {e}')
 
         try:
-            from gene_game import QUEST_DEFINITIONS
-            GeneCryptApp.QUEST_DEFINITIONS = QUEST_DEFINITIONS
             self.game._init_quests()
         except Exception as e:
             _log_error(f'Quest init error: {e}\n{traceback.format_exc()}')
 
+        # 创建主界面
         tp = TabbedPanel(do_default_tab=False, tab_width=dp(100))
         tp.background_color = (0.1, 0.1, 0.2, 1)
         tp.background = ''
