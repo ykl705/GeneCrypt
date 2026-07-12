@@ -9,6 +9,7 @@ from kivy.app import App
 from kivy.clock import Clock
 from kivy.metrics import dp
 from kivy.graphics import Color, Rectangle
+from gene_game import QUEST_DEFINITIONS
 
 
 class QuestScreen(Screen):
@@ -71,7 +72,7 @@ class QuestScreen(Screen):
         app = App.get_running_app()
         game = app.game
         self._quest_list.clear_widgets()
-        quests = [q for q in app.QUEST_DEFINITIONS if q['category'] == self._category]
+        quests = [q for q in QUEST_DEFINITIONS if q['category'] == self._category]
         for q in quests:
             qid = q['id']
             completed = qid in game.quest_completed

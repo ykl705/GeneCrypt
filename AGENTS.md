@@ -1,7 +1,8 @@
 # GeneCrypt Project Notes
 
 ## Key Files
-- `gene_game.py` - Main game file (~6901 lines). All quest system + genome optimization code.
+- `gene_game.py` - Main game file (~3295 lines). Pure game logic (Card, Game, BattleSystem). No tkinter/PIL dependencies - Android safe.
+- `legacy_gui.py` - Desktop-only tkinter GUI (GeneGameGUI). Excluded from APK build.
 - `gene_enhance_config.py` - `STAT_ENHANCE_REGIONS` definitions (generated deterministically with `random.seed(42)`).
 - `gene_config.py` - Gene templates, chromosome layouts, skill gene definitions.
 - `trait_config.py` - Trait calculation config.
