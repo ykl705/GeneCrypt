@@ -3,7 +3,6 @@ import time
 import json
 import os
 from datetime import datetime
-import threading
 
 # ==========================================    
 # 导入配置模块
