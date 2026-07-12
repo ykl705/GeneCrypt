@@ -124,6 +124,7 @@ _write_crash_log('=== GeneCrypt Startup ===')
 # ==========================================
 # Kivy 配置（必须在其他 Kivy 导入之前）
 # ==========================================
+os.environ['KIVY_GL_BACKEND'] = 'gles'
 try:
     from kivy.config import Config
     Config.set('graphics', 'width', '1400')

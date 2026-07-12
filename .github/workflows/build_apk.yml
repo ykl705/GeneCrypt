@@ -27,7 +27,7 @@ jobs:
       - name: Install Python packages
         run: |
           python3 -m pip install --upgrade pip setuptools wheel
-          pip install 'Cython>=3.0' virtualenv 'buildozer>=1.5,<2'
+          pip install 'Cython>=0.29,<3.0' virtualenv buildozer
 
       - name: Download Android SDK/NDK tools (first pass)
         run: |
