@@ -40,7 +40,7 @@ jobs:
 
       - name: Create GL compatibility headers in NDK + clean build state
         run: |
-          NDK="$HOME/.buildozer/android/platform/android-ndk-r23c"
+          NDK="$HOME/.buildozer/android/platform/android-ndk-r28c"
           NDK_SYSROOT="$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
           mkdir -p "$NDK_SYSROOT/GL"
           printf '#include <GLES2/gl2.h>\n' > "$NDK_SYSROOT/GL/gl.h"
