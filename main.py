@@ -43,7 +43,7 @@ def _show_crash_dialog(msg):
         sdl2 = ctypes.cdll.LoadLibrary('libSDL2.so')
         sdl2.SDL_ShowSimpleMessageBox.argtypes = [ctypes.c_uint32, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_void_p]
         sdl2.SDL_ShowSimpleMessageBox.restype = ctypes.c_int
-        short = (full_msg[:1000] + '...') if len(full_msg) > 1000 else full_msg
+        short = (full_msg[-2000:] + '\n[...上略]') if len(full_msg) > 2000 else full_msg
         sdl2.SDL_ShowSimpleMessageBox(0, b'GeneCrypt Error', short.encode('utf-8'), None)
         return
     except Exception as e:
