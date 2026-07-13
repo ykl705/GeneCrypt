@@ -63,7 +63,7 @@ jobs:
 
       - name: Build APK
         run: |
-          export CFLAGS="$CFLAGS -D__USE_OPENGL_ES2=1"
+          export CFLAGS="$CFLAGS -D__USE_OPENGL_ES2=1 -DCYTHON_ABI_VERSION=0x100B0D"
           KIVY_GL_BACKEND=gles buildozer android debug --verbose 2>&1 | tee buildozer_build.log
 
       - name: Upload build logs
