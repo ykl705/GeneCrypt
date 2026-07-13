@@ -5,12 +5,12 @@ package.domain = com.genecrypt
 source.dir = .
 source.include_exts = py,png,jpg,kv,ttf,wav,txt,json,xml
 source.exclude_exts = spec
-source.exclude_dirs = tests, __pycache__, temp_check, .github
+source.exclude_dirs = tests, __pycache__, temp_check, .github, p4a
 source.exclude_patterns = *.md,*.zip,*.log,gene_game_desktop.py
 version = 0.1.1
 
 # 精简依赖，避免版本冲突
-requirements = python3,kivy==2.3.0,pillow,filetype
+requirements = python3,kivy,pillow,filetype
 
 orientation = landscape
 fullscreen = 0

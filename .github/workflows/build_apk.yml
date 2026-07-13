@@ -27,7 +27,7 @@ jobs:
       - name: Install Python packages
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          pip install 'Cython>=3.0' virtualenv buildozer
+          pip install 'Cython>=3.1.0' virtualenv buildozer
 
       - name: Verify Python version
         run: python --version
@@ -44,7 +44,6 @@ jobs:
       - name: Create GL compatibility headers in NDK + clean build state
         run: |
           NDK="$HOME/.buildozer/android/platform/android-ndk-r28c"
-          # Use actual NDK path from ANDROIDNDK env var if available
           if [ -n "${ANDROIDNDK:-}" ] && [ -d "$ANDROIDNDK" ]; then
             NDK="$ANDROIDNDK"
           fi
@@ -52,18 +51,24 @@ jobs:
           mkdir -p "$NDK_SYSROOT/GL"
           printf '#include <GLES2/gl2.h>\n' > "$NDK_SYSROOT/GL/gl.h"
           printf '#include <GLES2/gl2ext.h>\n' > "$NDK_SYSROOT/GL/glext.h"
-          # Create libGL.so -> libGLESv2.so symlink so Kivy's desktop GL backends link
           GLES_FILE="$(find "$NDK" -name "libGLESv2.so" -path "*/aarch64-linux-android/*" 2>/dev/null | head -1)"
           if [ -n "$GLES_FILE" ] && [ -f "$GLES_FILE" ]; then
             ln -sf libGLESv2.so "$(dirname "$GLES_FILE")/libGL.so"
             echo "Created libGL.so symlink in $(dirname "$GLES_FILE")"
           fi
-          # Clean partial build artifacts from first pass
           rm -rf .buildozer/android/platform/build-arm64-v8a
+
+      - name: Patch p4a kivy recipe for Cython >= 3.1 + .c deletion
+        run: |
+          KIVY_RECIPE=$(find "$HOME/.buildozer" -path "*/recipes/kivy/__init__.py" 2>/dev/null | head -1)
+          if [ -z "$KIVY_RECIPE" ]; then
+            echo "ERROR: Kivy recipe not found"; exit 1
+          fi
+          python3 p4a/patch_kivy_recipe.py "$KIVY_RECIPE"
 
       - name: Build APK
         run: |
-          export CFLAGS="$CFLAGS -D__USE_OPENGL_ES2=1 -DCYTHON_ABI_VERSION=0x100B0D"
+          export CFLAGS="$CFLAGS -D__USE_OPENGL_ES2=1"
           KIVY_GL_BACKEND=gles buildozer android debug --verbose 2>&1 | tee buildozer_build.log
 
       - name: Upload build logs
