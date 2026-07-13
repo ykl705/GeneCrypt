@@ -17,6 +17,11 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Setup Python 3.12 (avoid cgi removal in Python 3.13+)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Install system dependencies
         run: |
           sudo apt update
@@ -26,8 +31,11 @@ jobs:
 
       - name: Install Python packages
         run: |
-          python3 -m pip install --upgrade pip setuptools wheel
+          python -m pip install --upgrade pip setuptools wheel
           pip install 'Cython>=0.29,<3.0' virtualenv buildozer
+
+      - name: Verify Python version
+        run: python --version
 
       - name: Download Android SDK/NDK tools (first pass)
         run: |
