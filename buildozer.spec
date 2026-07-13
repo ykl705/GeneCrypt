@@ -15,10 +15,10 @@ requirements = python3,kivy==2.3.0,pillow,filetype
 orientation = landscape
 fullscreen = 0
 
-android.api = 33
+android.api = 34
 android.minapi = 21
-android.ndk = 25b
-android.sdk = 33
+android.ndk = 28c
+android.sdk = 34
 android.gradle_dependencies = androidx.core:core:1.9.0
 android.wakelock = True
 android.permissions = INTERNET,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,VIBRATE,WAKE_LOCK
