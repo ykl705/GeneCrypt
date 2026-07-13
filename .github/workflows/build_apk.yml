@@ -53,10 +53,10 @@ jobs:
           printf '#include <GLES2/gl2.h>\n' > "$NDK_SYSROOT/GL/gl.h"
           printf '#include <GLES2/gl2ext.h>\n' > "$NDK_SYSROOT/GL/glext.h"
           # Create libGL.so -> libGLESv2.so symlink so Kivy's desktop GL backends link
-          NDK_LIBDIR="$(find "$NDK" -name "libGLESv2.so" -path "*/aarch64-linux-android/*" 2>/dev/null | head -1 | xargs dirname)"
-          if [ -n "$NDK_LIBDIR" ] && [ -f "$NDK_LIBDIR/libGLESv2.so" ]; then
-            ln -sf libGLESv2.so "$NDK_LIBDIR/libGL.so"
-            echo "Created libGL.so -> libGLESv2.so symlink in $NDK_LIBDIR"
+          GLES_FILE="$(find "$NDK" -name "libGLESv2.so" -path "*/aarch64-linux-android/*" 2>/dev/null | head -1)"
+          if [ -n "$GLES_FILE" ] && [ -f "$GLES_FILE" ]; then
+            ln -sf libGLESv2.so "$(dirname "$GLES_FILE")/libGL.so"
+            echo "Created libGL.so symlink in $(dirname "$GLES_FILE")"
           fi
           # Clean partial build artifacts from first pass
           rm -rf .buildozer/android/platform/build-arm64-v8a
