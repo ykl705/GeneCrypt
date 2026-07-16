@@ -58,17 +58,9 @@ jobs:
           fi
           rm -rf .buildozer/android/platform/build-*
 
-      - name: Patch p4a kivy recipe for Cython >= 3.1 + .c deletion
-        run: |
-          KIVY_RECIPE=$(find "$HOME/.buildozer" -path "*/recipes/kivy/__init__.py" 2>/dev/null | head -1)
-          if [ -z "$KIVY_RECIPE" ]; then
-            echo "ERROR: Kivy recipe not found"; exit 1
-          fi
-          python3 p4a/patch_kivy_recipe.py "$KIVY_RECIPE"
-
       - name: Build APK
         run: |
-          export CFLAGS="$CFLAGS -D__USE_OPENGL_ES2=1"
+          export CFLAGS="$CFLAGS -D__USE_OPENGL_ES2=1 -DCYTHON_ABI_VERSION=0x100B0D"
           KIVY_GL_BACKEND=gles buildozer android debug --verbose 2>&1 | tee buildozer_build.log
 
       - name: Upload build logs
