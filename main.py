@@ -25,27 +25,6 @@ try:
 except Exception as e:
     log_error(f'Config error: {e}')
 
-# ========== 中文字体 ==========
-def _setup_cjk_font():
-    from kivy.core.text import LabelBase, DEFAULT_FONT
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    candidates = [
-        os.path.join(base_dir, 'assets', 'fonts', 'DroidSansFallback.ttf'),
-        '/system/fonts/DroidSansFallback.ttf',
-        '/system/fonts/NotoSansCJK-Regular.ttc',
-    ]
-    for fp in candidates:
-        if os.path.exists(fp):
-            try:
-                LabelBase.register(DEFAULT_FONT, fn_regular=fp)
-                log_error(f'CJK font registered: {fp}')
-                return
-            except Exception as e:
-                log_error(f'Font register failed ({fp}): {e}')
-    log_error('WARNING: No CJK font found')
-
-_setup_cjk_font()
-
 # ========== Kivy 导入 ==========
 try:
     from kivy.app import App
@@ -55,9 +34,32 @@ try:
     from kivy.metrics import dp
     from kivy.lang import Builder
     from kivy.utils import platform
+    from kivy.core.text import LabelBase, DEFAULT_FONT
 except Exception as e:
     log_error(f'Kivy imports error: {e}\n{traceback.format_exc()}')
     raise
+
+# ========== 中文字体注册 ==========
+def _setup_cjk_font():
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(base_dir, 'assets', 'fonts', 'DroidSansFallback.ttf'),
+        os.path.join(base_dir, 'DroidSansFallback.ttf'),
+        '/system/fonts/DroidSansFallback.ttf',
+        '/system/fonts/NotoSansCJK-Regular.ttc',
+        '/system/fonts/NotoSansSC-Regular.otf',
+    ]
+    for fp in candidates:
+        if os.path.exists(fp):
+            try:
+                LabelBase.register(DEFAULT_FONT, fn_regular=fp, fn_bold=fp, fn_italic=fp, fn_bolditalic=fp)
+                log_error(f'CJK font registered: {fp}')
+                return
+            except Exception as e:
+                log_error(f'Font register failed ({fp}): {e}')
+    log_error('WARNING: No CJK font found - Chinese text may be garbled')
+
+_setup_cjk_font()
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -121,7 +123,7 @@ class GeneCryptApp(App):
         self._load_kv_files()
         
         # 创建 TabbedPanel
-        tp = TabbedPanel(do_default_tab=False, tab_width=dp(100))
+        tp = TabbedPanel(do_default_tab=False, tab_width=dp(120))
         tp.background_color = (0.1, 0.1, 0.2, 1)
         tp.background = ''
         
@@ -145,6 +147,14 @@ class GeneCryptApp(App):
             header = TabbedPanelHeader(text=tab_name)
             header.content = screen
             tp.add_widget(header)
+        
+        def _on_tab_change(instance, value):
+            for tab in tp.tab_list:
+                content = tab.content
+                if tab == tp.current_tab and hasattr(content, 'on_enter'):
+                    content.on_enter()
+        
+        tp.bind(current_tab=_on_tab_change)
         
         # 定时保存
         Clock.schedule_interval(lambda dt: self._auto_save(), 30)

@@ -51,7 +51,7 @@ class CardLibraryScreen(Screen):
         self._card_list.clear_widgets()
         for card in game.cards:
             cw = CardWidget(card=card)
-            cw.bind(on_touch_down=lambda _, touch, c=card: self._on_card_click(c, touch, cw))
+            cw.bind(on_release=lambda _, c=card: self._on_card_select(c))
             self._card_list.add_widget(cw)
         if self._selected_card and self._selected_card in game.cards:
             self._show_detail(self._selected_card)
@@ -59,10 +59,9 @@ class CardLibraryScreen(Screen):
             self._detail.clear_widgets()
             self._action_bar.clear_widgets()
 
-    def _on_card_click(self, card, touch, widget):
-        if widget.collide_point(*touch.pos):
-            self._selected_card = card
-            self._show_detail(card)
+    def _on_card_select(self, card):
+        self._selected_card = card
+        self._show_detail(card)
 
     def _show_detail(self, card):
         self._detail.clear_widgets()
@@ -80,8 +79,8 @@ class CardLibraryScreen(Screen):
         stats = [
             ('攻击', t.get('attack', 0)), ('生命', t.get('health', 0)),
             ('防御', t.get('defense', 0)), ('速度', t.get('speed', 0)),
-            ('体力', t.get('stamina', 0)), ('暴击', t.get('critical', 0)),
-            ('闪避', t.get('dodge', 0)), ('寿命', t.get('lifespan', 0)),
+            ('体力', t.get('stamina', 0)), ('暴击', t.get('critical_rate', 0)),
+            ('闪避', t.get('dodge_rate', 0)), ('寿命', t.get('lifespan', 0)),
         ]
         for name, val in stats:
             stats_grid.add_widget(Label(text=f'{name}:', color=(0.8, 0.8, 0.8, 1), font_size=dp(11)))

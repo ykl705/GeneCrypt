@@ -3,13 +3,14 @@ from kivy.uix.label import Label
 from kivy.uix.button import Button
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.scrollview import ScrollView
+from kivy.uix.behaviors import ButtonBehavior
 from kivy.metrics import dp
 from kivy.properties import ObjectProperty, NumericProperty, StringProperty
 from kivy.graphics import Color, Rectangle
 import random
 
 
-class CardWidget(BoxLayout):
+class CardWidget(ButtonBehavior, BoxLayout):
     card = ObjectProperty(None, allownone=True)
 
     def __init__(self, card=None, **kwargs):
@@ -22,30 +23,31 @@ class CardWidget(BoxLayout):
         self.card = card
         if card:
             self._build_ui()
+        self.bind(size=self._on_size_changed)
+
+    def _on_size_changed(self, instance, value):
+        if not self.card:
+            return
+        for child in self.children:
+            if isinstance(child, Label):
+                child.text_size = (self.width - dp(10), None)
 
     def _build_ui(self):
         self.clear_widgets()
         c = self.card
         gender_color = '#4a90d9' if c.gender == 'male' else '#d94a8a'
         alive_str = '' if c.is_alive else ' [已死亡]'
-        with self.canvas.before:
-            Color(*[int(gender_color[i:i+2], 16)/255 for i in (1, 3, 5)], 0.3)
-            self._rect = Rectangle(pos=self.pos, size=self.size)
-        self.bind(pos=lambda _, v: setattr(self._rect, 'pos', v) if hasattr(self, '_rect') else None,
-                  size=lambda _, v: setattr(self._rect, 'size', v) if hasattr(self, '_rect') else None)
+
         name_lbl = Label(text=f'{c.name} [{c.id}]{alive_str}',
                          size_hint_y=0.4, color=(1, 1, 1, 1), halign='left', valign='middle',
-                         text_size=(self.width, None))
+                         text_size=(self.width - dp(10), None), shorten=True)
         traits = c.traits
         info = f'HP:{traits.get("health","?")} ATK:{traits.get("attack","?")} DEF:{traits.get("defense","?")} SPD:{traits.get("speed","?")}'
         info_lbl = Label(text=info, size_hint_y=0.3, color=(0.8, 0.8, 0.8, 1),
-                         halign='left', text_size=(self.width, None))
+                         halign='left', text_size=(self.width - dp(10), None))
         skills_lbl = Label(text=f'技能: {", ".join(c.skills[:3])}' if c.skills else '无技能',
                            size_hint_y=0.3, color=(0.6, 1, 0.6, 1), halign='left',
-                           text_size=(self.width, None))
-        info_lbl.text_size = (self.width - dp(10), None)
-        skills_lbl.text_size = (self.width - dp(10), None)
-        name_lbl.text_size = (self.width - dp(10), None)
+                           text_size=(self.width - dp(10), None))
         self.add_widget(name_lbl)
         self.add_widget(info_lbl)
         self.add_widget(skills_lbl)
@@ -82,8 +84,8 @@ class CardDetailPopup(BoxLayout):
         stats = [
             ('攻击', t.get('attack', 0)), ('生命', t.get('health', 0)),
             ('防御', t.get('defense', 0)), ('速度', t.get('speed', 0)),
-            ('体力', t.get('stamina', 0)), ('暴击', t.get('critical', 0)),
-            ('闪避', t.get('dodge', 0)), ('寿命', t.get('lifespan', 0)),
+            ('体力', t.get('stamina', 0)), ('暴击', t.get('critical_rate', 0)),
+            ('闪避', t.get('dodge_rate', 0)), ('寿命', t.get('lifespan', 0)),
         ]
         for name, val in stats:
             inner.add_widget(Label(text=name, color=(0.8, 0.8, 0.8, 1)))

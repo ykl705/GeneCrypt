@@ -40,8 +40,8 @@ class BreedingLabScreen(Screen):
         main.add_widget(btn_row)
 
         ivf = BoxLayout(orientation='horizontal', size_hint_y=0.08, spacing=dp(5))
-        ivf.add_widget(Button(text='提取精子', on_press=lambda _: self._extract_gamete('male')))
-        ivf.add_widget(Button(text='提取卵子', on_press=lambda _: self._extract_gamete('female')))
+        ivf.add_widget(Button(text='提取精子', on_press=lambda _: self._extract_gamete(True)))
+        ivf.add_widget(Button(text='提取卵子', on_press=lambda _: self._extract_gamete(False)))
         ivf.add_widget(Button(text='体外受精', on_press=lambda _: self._fuse_gametes()))
         main.add_widget(ivf)
         self._ivf_lbl = Label(text='IVF: 未提取', size_hint_y=0.04, color=(0.8, 0.8, 0.8, 1))
@@ -58,6 +58,8 @@ class BreedingLabScreen(Screen):
         self._female_card = None
         self._male_dropdown = None
         self._female_dropdown = None
+        self._stored_sperm = None
+        self._stored_egg = None
 
     def on_enter(self):
         self._refresh()
@@ -113,9 +115,9 @@ class BreedingLabScreen(Screen):
             return
         app = App.get_running_app()
         result = app.game.breeding(self._male_card, self._female_card)
-        if isinstance(result, dict) and 'error' in result:
+        if result is None:
             from kivy.uix.popup import Popup
-            popup = Popup(title='繁殖失败', content=Label(text=result['error']), size_hint=(0.5, 0.3))
+            popup = Popup(title='繁殖失败', content=Label(text='繁殖失败：请选择不同性别的卡牌'), size_hint=(0.5, 0.3))
             popup.open()
         else:
             app.refresh_breeding_combos()
@@ -127,30 +129,50 @@ class BreedingLabScreen(Screen):
         self._auto_btn.text = '自动繁殖: ON' if app.game.auto_breeding else '自动繁殖: OFF'
         app.game.save_game()
 
-    def _extract_gamete(self, gender):
+    def _extract_gamete(self, as_male):
         app = App.get_running_app()
-        card = self._male_card if gender == 'male' else self._female_card
+        card = self._male_card if as_male else self._female_card
         if not card:
             from kivy.uix.popup import Popup
-            popup = Popup(title='错误', content=Label(text=f'请先选择{"雄性" if gender == "male" else "雌性"}卡片'),
+            popup = Popup(title='错误', content=Label(text=f'请先选择{"雄性" if as_male else "雌性"}卡牌'),
                           size_hint=(0.5, 0.3))
             popup.open()
             return
-        result = app.game.extract_gamete(card, gender)
-        if result.get('success'):
-            self._ivf_lbl.text = f'IVF: {result.get("msg", "提取成功")}'
+        result = app.game.extract_gamete(card, as_male)
+        gamete, msg = result
+        if gamete:
+            if as_male:
+                self._stored_sperm = gamete
+            else:
+                self._stored_egg = gamete
+            self._ivf_lbl.text = f'IVF: {msg}'
         else:
             from kivy.uix.popup import Popup
-            popup = Popup(title='提取失败', content=Label(text=result.get('msg', '未知错误')), size_hint=(0.5, 0.3))
+            popup = Popup(title='提取失败', content=Label(text=msg), size_hint=(0.5, 0.3))
             popup.open()
 
     def _fuse_gametes(self):
+        if not self._stored_sperm or not self._stored_egg:
+            from kivy.uix.popup import Popup
+            popup = Popup(title='受精失败', content=Label(text='请先提取精子和卵子'), size_hint=(0.5, 0.3))
+            popup.open()
+            return
         app = App.get_running_app()
-        result = app.game.fuse_gametes()
-        if result.get('success'):
-            app.refresh_breeding_combos()
-            self._refresh()
+        child_chr, child_gender = app.game.fuse_gametes(self._stored_sperm, self._stored_egg)
+        if child_chr:
+            child_name = f'IVF体{len(app.game.cards)+1}'
+            card = app.game.create_card(child_name, child_gender, chromosomes=child_chr)
+            if card:
+                self._stored_sperm = None
+                self._stored_egg = None
+                self._ivf_lbl.text = 'IVF: 受精成功！'
+                app.refresh_breeding_combos()
+                self._refresh()
+            else:
+                from kivy.uix.popup import Popup
+                popup = Popup(title='受精失败', content=Label(text='卡牌创建失败，可能已满'), size_hint=(0.5, 0.3))
+                popup.open()
         else:
             from kivy.uix.popup import Popup
-            popup = Popup(title='受精失败', content=Label(text=result.get('msg', '未知错误')), size_hint=(0.5, 0.3))
+            popup = Popup(title='受精失败', content=Label(text='配子融合失败'), size_hint=(0.5, 0.3))
             popup.open()
