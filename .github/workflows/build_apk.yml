@@ -56,7 +56,10 @@ jobs:
             ln -sf libGLESv2.so "$(dirname "$GLES_FILE")/libGL.so"
             echo "Created libGL.so symlink in $(dirname "$GLES_FILE")"
           fi
-          rm -rf .buildozer/android/platform/build-arm64-v8a
+          rm -rf .buildozer/android/platform/build-*
+          rm -rf .buildozer/android/platform/python-installs
+          rm -rf .buildozer/android/app
+          rm -rf .buildozer/app
 
       - name: Patch p4a kivy recipe for Cython >= 3.1 + .c deletion
         run: |
