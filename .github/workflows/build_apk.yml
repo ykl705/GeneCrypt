@@ -29,6 +29,13 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           pip install 'Cython>=3.1.0' virtualenv buildozer
 
+      - name: Bundle Chinese font for APK
+        run: |
+          sudo apt-get install -y fonts-droid-fallback
+          mkdir -p assets/fonts
+          cp /usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf assets/fonts/DroidSansFallback.ttf
+          echo "Font bundled: $(ls -lh assets/fonts/DroidSansFallback.ttf)"
+
       - name: Verify Python version
         run: python --version
 

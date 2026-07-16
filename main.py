@@ -25,6 +25,27 @@ try:
 except Exception as e:
     log_error(f'Config error: {e}')
 
+# ========== 中文字体 ==========
+def _setup_cjk_font():
+    from kivy.core.text import LabelBase, DEFAULT_FONT
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(base_dir, 'assets', 'fonts', 'DroidSansFallback.ttf'),
+        '/system/fonts/DroidSansFallback.ttf',
+        '/system/fonts/NotoSansCJK-Regular.ttc',
+    ]
+    for fp in candidates:
+        if os.path.exists(fp):
+            try:
+                LabelBase.register(DEFAULT_FONT, fn_regular=fp)
+                log_error(f'CJK font registered: {fp}')
+                return
+            except Exception as e:
+                log_error(f'Font register failed ({fp}): {e}')
+    log_error('WARNING: No CJK font found')
+
+_setup_cjk_font()
+
 # ========== Kivy 导入 ==========
 try:
     from kivy.app import App

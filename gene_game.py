@@ -772,6 +772,18 @@ class Game:
     def _copy_tech_tree(self):
         return {k: v.copy() for k, v in TECH_TREE.items()}
     
+    def _create_low_stat_card(self, name, gender, atk=10, hp=60, def_val=8, spd=8):
+        card = Card(name, gender)
+        card.traits['attack'] = atk
+        card.traits['health'] = hp
+        card.traits['defense'] = def_val
+        card.traits['speed'] = spd
+        card.traits['stamina'] = 20
+        card.traits['critical_rate'] = 3
+        card.traits['dodge_rate'] = 2
+        card.traits['lifespan'] = 50
+        return card
+
     def create_initial_cards(self):
         config = INITIAL_CARDS_CONFIG
         if 'cards' in config:
@@ -790,6 +802,19 @@ class Game:
                 self._init_starter_passive(card)
                 self._deactivate_extra_skill_genes(card)
                 self.cards.append(card)
+        starter_gifts = [
+            {'name': '新手战士', 'gender': 'male', 'atk': 12, 'hp': 70, 'def_val': 10, 'spd': 9},
+            {'name': '新手法师', 'gender': 'female', 'atk': 15, 'hp': 55, 'def_val': 6, 'spd': 10},
+            {'name': '新手护卫', 'gender': 'male', 'atk': 8, 'hp': 90, 'def_val': 14, 'spd': 6},
+            {'name': '新手斥候', 'gender': 'female', 'atk': 11, 'hp': 60, 'def_val': 7, 'spd': 14},
+        ]
+        for g in starter_gifts:
+            card = self._create_low_stat_card(g['name'], g['gender'],
+                atk=g['atk'], hp=g['hp'], def_val=g['def_val'], spd=g['spd'])
+            card.skills = card.skills[:2]
+            self._init_starter_passive(card)
+            self._deactivate_extra_skill_genes(card)
+            self.cards.append(card)
     
     def _deactivate_extra_skill_genes(self, card):
         from gene_config import SKILL_GENES, GENE_TEMPLATES

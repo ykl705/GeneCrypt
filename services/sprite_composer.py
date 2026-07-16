@@ -38,7 +38,7 @@ def compose_sprite(genome_list, enemy_templates=None):
         sprite_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'assets', 'enemies')
         tid_textures = {}
         for tid in enemy_templates:
-            fp = os.path.join(sprite_dir, str(tid), '0.png')
+            fp = os.path.join(sprite_dir, f'{tid}_0.png')
             if os.path.exists(fp):
                 tid_textures[tid] = PILImage.open(fp).convert('RGBA')
         if not tid_textures:
