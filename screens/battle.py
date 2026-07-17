@@ -59,6 +59,7 @@ class BattleScreen(Screen):
         self.add_widget(main)
         self._selected_stage = 1
         self._team = {}
+        self._pending_card = None
 
     def on_enter(self):
         pass
@@ -93,40 +94,92 @@ class BattleScreen(Screen):
 
     def _show_team_select(self):
         app = App.get_running_app()
-        content = BoxLayout(orientation='vertical', spacing=dp(5))
-        content.add_widget(Label(text='选择出战卡牌 (点击选择, 最多3张)'))
-        sv = ScrollView()
+        content = BoxLayout(orientation='vertical', spacing=dp(8), padding=dp(10))
+
+        hint_lbl = Label(text='选择出战卡牌: 点击下方卡牌选中，再点击上方格子放置',
+                         size_hint_y=None, height=dp(30), color=(0.8, 0.8, 0.8, 1))
+        content.add_widget(hint_lbl)
+
+        self._pending_lbl = Label(text='', size_hint_y=None, height=dp(25),
+                                   color=(0.4, 1, 0.4, 1))
+        content.add_widget(self._pending_lbl)
+
+        grid_label = Label(text='[ 出战阵型 - 点击格子放置/移除 ]', size_hint_y=None,
+                            height=dp(25), color=(1, 1, 1, 1))
+        content.add_widget(grid_label)
+
+        self._grid_btns = {}
+        grid = GridLayout(cols=3, spacing=dp(4), size_hint_y=None, height=dp(210))
+        for pos in range(9):
+            card_at_pos = self._team.get(pos)
+            text = f'[{pos+1}] {card_at_pos.name}' if card_at_pos else f'[空{pos+1}]'
+            color = (0.3, 0.8, 1, 1) if card_at_pos else (0.4, 0.4, 0.4, 1)
+            btn = Button(text=text, size_hint=(1, None), height=dp(60),
+                         background_color=color, halign='center')
+            btn.bind(on_press=lambda _, p=pos: self._grid_cell_clicked(p))
+            grid.add_widget(btn)
+            self._grid_btns[pos] = btn
+        content.add_widget(grid)
+
+        card_label = Label(text='[ 可用卡牌 ]', size_hint_y=None, height=dp(25),
+                            color=(1, 1, 1, 1))
+        content.add_widget(card_label)
+
+        sv = ScrollView(size_hint_y=0.4)
         inner = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(2))
         inner.bind(minimum_height=inner.setter('height'))
         for card in app.game.cards:
             if not card.is_alive:
                 continue
-            btn = Button(text=f'{card.name} [ATK:{card.traits.get("attack",0)} HP:{card.traits.get("health",0)}]',
-                         size_hint_y=None, height=dp(40))
-            btn.bind(on_press=lambda _, c=card: self._toggle_team_card(c))
+            in_team = any(card.id == (c2.id if c2 else None) for c2 in self._team.values())
+            prefix = '[已上阵] ' if in_team else ''
+            btn = Button(
+                text=f'{prefix}{card.name} ATK:{card.traits.get("attack",0)} HP:{card.traits.get("health",0)}',
+                size_hint_y=None, height=dp(36))
+            btn.bind(on_press=lambda _, c=card: self._pick_card(c))
             inner.add_widget(btn)
         sv.add_widget(inner)
         content.add_widget(sv)
-        btn_row = BoxLayout(orientation='horizontal', size_hint_y=0.15, spacing=dp(10))
-        confirm = Button(text='确认')
-        clear = Button(text='清空')
+
+        btn_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(44), spacing=dp(10))
+        confirm = Button(text='确认编队')
+        clear = Button(text='清空全部')
         btn_row.add_widget(confirm)
         btn_row.add_widget(clear)
         content.add_widget(btn_row)
-        popup = Popup(title='选择队伍', content=content, size_hint=(0.6, 0.7))
-        confirm.bind(on_press=popup.dismiss)
-        clear.bind(on_press=lambda _: self._clear_team())
+
+        popup = Popup(title='选择队伍', content=content, size_hint=(0.8, 0.85))
+        confirm.bind(on_press=lambda _: popup.dismiss())
+        clear.bind(on_press=lambda _: self._clear_team_ui())
         popup.open()
 
-    def _toggle_team_card(self, card):
-        if card.id in self._team:
-            del self._team[card.id]
-        elif len(self._team) < 3:
-            self._team[card.id] = card
-        self._team_btn.text = f'队伍: {len(self._team)}/3'
+    def _pick_card(self, card):
+        self._pending_card = card
+        self._pending_lbl.text = f'已选中: {card.name} (点击上方格子放置)'
 
-    def _clear_team(self):
+    def _grid_cell_clicked(self, pos):
+        if self._pending_card:
+            self._team[pos] = self._pending_card
+            self._pending_card = None
+            self._pending_lbl.text = ''
+            self._refresh_team_ui()
+            self._team_btn.text = f'队伍: {len(self._team)}/3'
+        elif pos in self._team:
+            del self._team[pos]
+            self._refresh_team_ui()
+            self._team_btn.text = f'队伍: {len(self._team)}/3'
+
+    def _refresh_team_ui(self):
+        for pos, btn in self._grid_btns.items():
+            card_at_pos = self._team.get(pos)
+            btn.text = f'[{pos+1}] {card_at_pos.name}' if card_at_pos else f'[空{pos+1}]'
+            btn.background_color = (0.3, 0.8, 1, 1) if card_at_pos else (0.4, 0.4, 0.4, 1)
+
+    def _clear_team_ui(self):
         self._team = {}
+        self._pending_card = None
+        self._pending_lbl.text = ''
+        self._refresh_team_ui()
         self._team_btn.text = '选择队伍'
 
     def _start_battle(self):
@@ -143,7 +196,7 @@ class BattleScreen(Screen):
         app = App.get_running_app()
         stage = STAGES[self._selected_stage]
         from gene_game import BattleSystem
-        grid = {i: card for i, (cid, card) in enumerate(self._team.items())}
+        grid = {pos: card for pos, card in self._team.items()}
         enemy_data_raw = stage.get('enemies', stage.get('waves', []))
         enemy_data = []
         if enemy_data_raw and isinstance(enemy_data_raw[0], dict) and 'name' in enemy_data_raw[0]:
