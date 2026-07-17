@@ -31,12 +31,10 @@ jobs:
 
       - name: Bundle Chinese font for APK
         run: |
-          sudo apt-get install -y fonts-wqy-microhei
+          sudo apt-get install -y fonts-droid-fallback
           mkdir -p assets/fonts
-          python3 tools/extract_ttc_font.py \
-            /usr/share/fonts/truetype/wqy/wqy-microhei.ttc \
-            assets/fonts/wqy-microhei.ttf
-          echo "Font: $(ls -lh assets/fonts/wqy-microhei.ttf)"
+          cp /usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf assets/fonts/DroidSansFallback.ttf
+          echo "Font: $(ls -lh assets/fonts/DroidSansFallback.ttf)"
 
       - name: Download SDK/NDK (first pass)
         run: |

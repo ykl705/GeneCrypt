@@ -43,7 +43,6 @@ except Exception as e:
 def _setup_cjk_font():
     base_dir = os.path.dirname(os.path.abspath(__file__))
     candidates = [
-        os.path.join(base_dir, 'assets', 'fonts', 'wqy-microhei.ttf'),
         os.path.join(base_dir, 'assets', 'fonts', 'DroidSansFallback.ttf'),
         '/system/fonts/DroidSansFallback.ttf',
         '/system/fonts/NotoSansCJK-Regular.ttc',
