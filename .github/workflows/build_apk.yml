@@ -58,24 +58,23 @@ jobs:
             echo "Created libGL.so symlink"
           fi
 
-      - name: Delete old partial build only
-        run: |
-          rm -rf .buildozer/android/platform/build-arm64-v8a/build
-          rm -rf .buildozer/android/platform/build-arm64-v8a/dists
-          echo "Cleaned partial build"
-
       - name: Build APK
         timeout-minutes: 45
         run: |
           export CFLAGS="$CFLAGS -D__USE_OPENGL_ES2=1 -DCYTHON_ABI_VERSION=0x100B0D"
           KIVY_GL_BACKEND=gles buildozer android debug 2>&1 | tee buildozer_build.log
+          echo "BUILDOZER EXIT: $?"
+          echo "=== bin/ ==="  && ls -la bin/ 2>/dev/null || echo "No bin/"
+          echo "=== searching for apk ===" && find . -name "*.apk" 2>/dev/null | head -5 || echo "No APK"
 
       - name: Upload build logs
         if: always()
         uses: actions/upload-artifact@v5
         with:
           name: buildozer-logs
-          path: buildozer_*.log
+          path: |
+            buildozer_*.log
+            buildozer_build.log
 
       - name: Upload APK
         if: always()
