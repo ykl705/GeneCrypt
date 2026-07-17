@@ -37,16 +37,17 @@ jobs:
           python3 -c 'from fontTools.ttLib import TTFont; f=TTFont("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc", fontNumber=0); f.save("assets/fonts/wqy-microhei.ttf")'
           echo "Font bundled: $(ls -lh assets/fonts/wqy-microhei.ttf)"
 
-      - name: Download Android SDK/NDK tools (first pass)
+      - name: Download SDK/NDK (first pass)
+        shell: bash
         run: |
-          buildozer android debug --verbose 2>&1 | tee buildozer_firstpass.log || true
+          (buildozer android debug --verbose 2>&1 | tee buildozer_firstpass.log) || true
 
       - name: Accept Android SDK licenses
         run: |
           SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
           yes | "$SDK_DIR/tools/bin/sdkmanager" --sdk_root="$SDK_DIR" --licenses 2>/dev/null || true
 
-      - name: Setup NDK GL compatibility headers
+      - name: Setup NDK GL compatibility headers + clean build state
         run: |
           NDK_DIR="$HOME/.buildozer/android/platform/android-ndk-r28c"
           NDK_SYSROOT="$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
@@ -58,34 +59,28 @@ jobs:
             ln -sf libGLESv2.so "$(dirname "$GLES_FILE")/libGL.so"
             echo "Created libGL.so symlink in $(dirname "$GLES_FILE")"
           fi
+          rm -rf .buildozer/android/platform/build-*
 
       - name: Build APK
+        shell: bash
         run: |
+          set -eo pipefail
           export CFLAGS="$CFLAGS -D__USE_OPENGL_ES2=1 -DCYTHON_ABI_VERSION=0x100B0D"
           KIVY_GL_BACKEND=gles buildozer android debug --verbose 2>&1 | tee buildozer_build.log
-
-      - name: Locate APK
-        if: always()
-        run: |
-          echo "=== bin/ ==="
-          ls -lah bin/ 2>/dev/null || echo "(bin/ not found)"
-          echo "=== searching for .apk files ==="
-          find . -name "*.apk" -type f 2>/dev/null | head -20 || echo "(no .apk found)"
-          echo "=== .buildozer dists ==="
-          find .buildozer -path "*/dists/*.apk" -type f 2>/dev/null | head -5 || echo "(none)"
-
-      - name: Upload build logs
-        if: always()
-        uses: actions/upload-artifact@v5
-        with:
-          name: buildozer-logs
-          path: buildozer_*.log
+          echo "=== Searching for APK ==="
+          find . -name "*.apk" -type f 2>/dev/null || echo "No APK found"
 
       - name: Upload APK
-        if: always()
         uses: actions/upload-artifact@v5
         with:
           name: genecrypt-apk
           path: |
             ./bin/*.apk
             .buildozer/android/platform/build-*/dists/**/*.apk
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: buildozer-logs
+          path: buildozer_build.log
