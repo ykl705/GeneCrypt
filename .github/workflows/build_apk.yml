@@ -36,50 +36,33 @@ jobs:
           cp /usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf assets/fonts/DroidSansFallback.ttf
           echo "Font: $(ls -lh assets/fonts/DroidSansFallback.ttf)"
 
-      - name: Download SDK/NDK tools (first pass)
+      - name: Pre-create NDK GL compatibility symlinks
         run: |
-          buildozer android debug --verbose 2>&1 | tee buildozer_firstpass.log || true
-
-      - name: Accept Android SDK licenses
-        run: |
-          SDK_DIR="$HOME/.buildozer/android/platform/android-sdk"
-          yes | "$SDK_DIR/tools/bin/sdkmanager" --sdk_root="$SDK_DIR" --licenses || true
-
-      - name: Create GL compatibility headers in NDK
-        run: |
-          NDK="$HOME/.buildozer/android/platform/android-ndk-r28c"
-          if [ -n "${ANDROIDNDK:-}" ] && [ -d "$ANDROIDNDK" ]; then
-            NDK="$ANDROIDNDK"
-          fi
-          NDK_SYSROOT="$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/include"
-          mkdir -p "$NDK_SYSROOT/GL"
-          printf '#include <GLES2/gl2.h>\n' > "$NDK_SYSROOT/GL/gl.h"
-          printf '#include <GLES2/gl2ext.h>\n' > "$NDK_SYSROOT/GL/glext.h"
-          GLES_FILE="$(find "$NDK" -name "libGLESv2.so" -path "*/aarch64-linux-android/*" 2>/dev/null | head -1)"
-          if [ -n "$GLES_FILE" ] && [ -f "$GLES_FILE" ]; then
-            ln -sf libGLESv2.so "$(dirname "$GLES_FILE")/libGL.so"
-            echo "Created libGL.so symlink in $(dirname "$GLES_FILE")"
-          fi
-
-      - name: Clean build state for fresh rebuild
-        run: |
-          rm -rf .buildozer/android/platform/build-arm64-v8a
-          rm -rf .buildozer/android/platform/python-installs
+          NDK_DIR="$HOME/.buildozer/android/platform/android-ndk-r28c"
+          SYSROOT="$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr"
+          mkdir -p "$SYSROOT/include/GL"
+          echo "#include <GLES2/gl2.h>" > "$SYSROOT/include/GL/gl.h"
+          echo "#include <GLES2/gl2ext.h>" > "$SYSROOT/include/GL/glext.h"
+          mkdir -p "$SYSROOT/lib/aarch64-linux-android/21"
+          ln -sf libGLESv2.so "$SYSROOT/lib/aarch64-linux-android/21/libGL.so"
+          echo "Pre-created GL symlinks"
 
       - name: Build APK
+        timeout-minutes: 45
         run: |
           export CFLAGS="$CFLAGS -D__USE_OPENGL_ES2=1 -DCYTHON_ABI_VERSION=0x100B0D"
           KIVY_GL_BACKEND=gles buildozer android debug --verbose 2>&1 | tee buildozer_build.log
 
-      - name: Upload build logs
-        if: failure()
-        uses: actions/upload-artifact@v5
-        with:
-          name: buildozer-logs
-          path: buildozer_*.log
-
       - name: Upload APK
+        if: always()
         uses: actions/upload-artifact@v5
         with:
           name: genecrypt-apk
           path: ./bin/*.apk
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: buildozer-logs
+          path: buildozer_build.log
