@@ -37,9 +37,9 @@ jobs:
           python3 -c 'from fontTools.ttLib import TTFont; f=TTFont("/usr/share/fonts/truetype/wqy/wqy-microhei.ttc", fontNumber=0); f.save("assets/fonts/wqy-microhei.ttf")'
           echo "Font bundled: $(ls -lh assets/fonts/wqy-microhei.ttf)"
 
-      - name: Download Android SDK/NDK tools only
+      - name: Download Android SDK/NDK tools (first pass)
         run: |
-          timeout 180 buildozer android debug --verbose 2>&1 | tee buildozer_firstpass.log || true
+          buildozer android debug --verbose 2>&1 | tee buildozer_firstpass.log || true
 
       - name: Accept Android SDK licenses
         run: |
@@ -58,31 +58,34 @@ jobs:
             ln -sf libGLESv2.so "$(dirname "$GLES_FILE")/libGL.so"
             echo "Created libGL.so symlink in $(dirname "$GLES_FILE")"
           fi
-          rm -rf .buildozer/android/platform/build-*
 
       - name: Build APK
         run: |
           export CFLAGS="$CFLAGS -D__USE_OPENGL_ES2=1 -DCYTHON_ABI_VERSION=0x100B0D"
           KIVY_GL_BACKEND=gles buildozer android debug --verbose 2>&1 | tee buildozer_build.log
 
-      - name: Debug APK output
+      - name: Locate APK
         if: always()
         run: |
-          echo "=== bin/ contents ==="
-          ls -la bin/ 2>/dev/null || echo "bin/ does not exist"
-          echo "=== .buildozer/android/platform/ contents ==="
-          ls .buildozer/android/platform/ 2>/dev/null || echo "no platform dir"
+          echo "=== bin/ ==="
+          ls -lah bin/ 2>/dev/null || echo "(bin/ not found)"
+          echo "=== searching for .apk files ==="
+          find . -name "*.apk" -type f 2>/dev/null | head -20 || echo "(no .apk found)"
+          echo "=== .buildozer dists ==="
+          find .buildozer -path "*/dists/*.apk" -type f 2>/dev/null | head -5 || echo "(none)"
 
       - name: Upload build logs
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v5
         with:
           name: buildozer-logs
-          path: buildozer_build.log
+          path: buildozer_*.log
 
       - name: Upload APK
         if: always()
         uses: actions/upload-artifact@v5
         with:
           name: genecrypt-apk
-          path: ./bin/*.apk
+          path: |
+            ./bin/*.apk
+            .buildozer/android/platform/build-*/dists/**/*.apk
