@@ -35,7 +35,8 @@ class QuestScreen(Screen):
         main.add_widget(cat_selector)
 
         content = BoxLayout(orientation='horizontal', spacing=dp(10))
-        self._quest_list = BoxLayout(orientation='vertical', size_hint_x=0.5, spacing=dp(2))
+        self._quest_list = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(2))
+        self._quest_list.bind(minimum_height=self._quest_list.setter('height'))
         sv_list = ScrollView(size_hint_x=0.5)
         sv_list.add_widget(self._quest_list)
         content.add_widget(sv_list)
