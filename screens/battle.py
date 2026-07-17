@@ -8,7 +8,6 @@ from kivy.uix.popup import Popup
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.metrics import dp
-from kivy.animation import Animation
 from battle_config import BATTLE_CONFIG, ENEMY_TEMPLATES
 
 
@@ -383,11 +382,11 @@ class BattleScreen(Screen):
         atk_cell = self._unit_cells.get(attacker.id)
         tgt_cell = self._unit_cells.get(target.id)
         if atk_cell:
-            anim = Animation(opacity=0.5, duration=0.08) + Animation(opacity=1.0, duration=0.08)
-            anim.start(atk_cell)
+            atk_cell.opacity = 0.4
+            Clock.schedule_once(lambda dt: setattr(atk_cell, 'opacity', 1.0), 0.15)
         if tgt_cell:
-            tgt_cell.opacity = 0.5
-            Clock.schedule_once(lambda dt: setattr(tgt_cell, 'opacity', 1.0), 0.15)
+            tgt_cell.opacity = 0.4
+            Clock.schedule_once(lambda dt: setattr(tgt_cell, 'opacity', 1.0), 0.2)
 
     def _update_all_cells(self):
         bs = self._battle_system
