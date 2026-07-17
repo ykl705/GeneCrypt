@@ -116,7 +116,7 @@ class BattleScreen(Screen):
         content.add_widget(grid)
 
         content.add_widget(Label(text='可用卡牌', size_hint_y=None, height=dp(22), color=(1, 1, 1, 1)))
-        sv = ScrollView(size_hint_y=0.4)
+        sv = ScrollView(size_hint_y=1, do_scroll_x=False)
         inner = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(2))
         inner.bind(minimum_height=inner.setter('height'))
         for card in app.game.cards:
