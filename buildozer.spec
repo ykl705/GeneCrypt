@@ -5,7 +5,7 @@ package.domain = com.genecrypt
 source.dir = .
 source.include_exts = py,png,jpg,kv,ttf,wav,txt,json,xml
 source.exclude_exts = spec
-source.exclude_dirs = tests, __pycache__, temp_check, .github, p4a
+source.exclude_dirs = tests, __pycache__, temp_check, .github, p4a, tools
 source.exclude_patterns = *.md,*.zip,*.log,gene_game_desktop.py
 version = 0.1.1
 

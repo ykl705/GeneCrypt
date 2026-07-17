@@ -33,17 +33,10 @@ jobs:
         run: |
           sudo apt-get install -y fonts-wqy-microhei
           mkdir -p assets/fonts
-          python3 -c "
-import struct
-def rd(f,n): return struct.unpack('>I', f.read(n))[0]
-with open('/usr/share/fonts/truetype/wqy/wqy-microhei.ttc','rb') as f:
-    h=f.read(12); cnt=rd(f,4)
-    off=[rd(f,4) for _ in range(cnt)]
-    f.seek(0); data=f.read()
-    ttf=data[off[0]:off[1] if len(off)>1 else len(data)]
-with open('assets/fonts/wqy-microhei.ttf','wb') as o: o.write(ttf)
-print('Font:', len(ttf), 'bytes')
-"
+          python3 tools/extract_ttc_font.py \
+            /usr/share/fonts/truetype/wqy/wqy-microhei.ttc \
+            assets/fonts/wqy-microhei.ttf
+          echo "Font: $(ls -lh assets/fonts/wqy-microhei.ttf)"
 
       - name: Download SDK/NDK (first pass)
         run: |
