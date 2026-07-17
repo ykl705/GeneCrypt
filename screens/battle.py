@@ -183,6 +183,15 @@ class BattleScreen(Screen):
         self._team_btn.text = '选择队伍'
 
     def _start_battle(self):
+        try:
+            self._start_battle_impl()
+        except Exception as e:
+            import traceback
+            err_msg = f'战斗初始化失败:\n{str(e)[:200]}'
+            popup = Popup(title='错误', content=Label(text=err_msg), size_hint=(0.7, 0.35))
+            popup.open()
+
+    def _start_battle_impl(self):
         if not self._team:
             popup = Popup(title='错误', content=Label(text='请选择队伍'), size_hint=(0.5, 0.3))
             popup.open()
@@ -199,19 +208,32 @@ class BattleScreen(Screen):
         grid = {pos: card for pos, card in self._team.items()}
         enemy_data_raw = stage.get('enemies', stage.get('waves', []))
         enemy_data = []
-        if enemy_data_raw and isinstance(enemy_data_raw[0], dict) and 'name' in enemy_data_raw[0]:
-            enemy_data = [dict(e) for e in enemy_data_raw]
-        else:
-            for wave_entry in enemy_data_raw:
-                entries = wave_entry.get('enemies', [wave_entry]) if isinstance(wave_entry, dict) else wave_entry
-                for e in entries:
-                    if isinstance(e, dict) and 'name' in e:
-                        enemy_data.append(dict(e))
-                    elif isinstance(e, str):
-                        from battle_config import ENEMY_TEMPLATES
-                        tmpl = ENEMY_TEMPLATES.get(e)
-                        if tmpl:
-                            enemy_data.append(dict(tmpl))
+        if enemy_data_raw and isinstance(enemy_data_raw, list):
+            first = enemy_data_raw[0] if enemy_data_raw else None
+            if isinstance(first, dict) and 'name' in first:
+                enemy_data = [dict(e) for e in enemy_data_raw]
+            else:
+                for wave_entry in enemy_data_raw:
+                    entries = wave_entry.get('enemies', [wave_entry]) if isinstance(wave_entry, dict) else wave_entry
+                    if isinstance(entries, list):
+                        for e in entries:
+                            if isinstance(e, dict) and 'name' in e:
+                                enemy_data.append(dict(e))
+                            elif isinstance(e, str):
+                                from battle_config import ENEMY_TEMPLATES
+                                tmpl = ENEMY_TEMPLATES.get(e)
+                                if tmpl:
+                                    ed = {
+                                        'name': tmpl['name'],
+                                        'health': int(tmpl.get('base_health', 100)),
+                                        'attack': int(tmpl.get('base_attack', 10)),
+                                        'defense': int(tmpl.get('base_defense', 5)),
+                                        'speed': int(tmpl.get('base_speed', 10)),
+                                        'skills': [],
+                                        'passive_abilities': tmpl.get('passive_abilities', []),
+                                        'width': 1, 'height': 1,
+                                    }
+                                    enemy_data.append(ed)
         if not enemy_data:
             enemy_data = [{'name': '测试敌人', 'health': 50, 'attack': 10, 'defense': 5, 'speed': 8,
                            'skills': [], 'passives': [], 'width': 1, 'height': 1, 'position': 0}]
@@ -283,37 +305,41 @@ class BattleScreen(Screen):
     def _battle_tick(self, dt):
         if not self._battle_running:
             return False
-        bs = self._battle_system
-        if not bs.is_running:
-            self._battle_running = False
-            return False
-        bs.update_action_bars_frame()
-        unit = bs.get_next_unit()
-        if unit:
-            if unit.is_player and not bs.is_auto:
-                from battle_config import BATTLE_CONFIG as _BC
-                max_bar_val = _BC['action_bar_max']
-                unit.action_bar -= max_bar_val
-                if bs.marked_target:
-                    target = bs.marked_target
-                    bs.marked_target = None
+        try:
+            bs = self._battle_system
+            if not bs.is_running:
+                self._battle_running = False
+                return False
+            bs.update_action_bars_frame()
+            bs.update_status_damage()
+            unit = bs.get_next_unit()
+            if unit:
+                if unit.is_player and not bs.is_auto:
+                    from battle_config import BATTLE_CONFIG as _BC
+                    max_bar_val = _BC['action_bar_max']
+                    unit.action_bar -= max_bar_val
+                    if bs.marked_target:
+                        target = bs.marked_target
+                        bs.marked_target = None
+                    else:
+                        front = [e for e in bs.enemies if e.is_alive]
+                        target = front[0] if front else None
+                    if target:
+                        result = bs.execute_turn(unit, [target])
+                        if result:
+                            self.add_log(f'{unit.name} → {target.name} 造成 {result.get("damage", 0)} 伤害')
+                            if not target.is_alive:
+                                self.add_log(f'{target.name} 被击败!')
                 else:
-                    front = [e for e in bs.enemies if e.is_alive]
-                    target = front[0] if front else None
-                if target:
-                    result = bs.execute_turn(unit, [target])
+                    result = bs.execute_turn(unit, None)
                     if result:
-                        self.add_log(f'{unit.name} → {target.name} 造成 {result.get("damage", 0)} 伤害')
-                        if not target.is_alive:
-                            self.add_log(f'{target.name} 被击败!')
-            else:
-                result = bs.execute_turn(unit, None)
-                if result:
-                    dmg = result.get('damage', 0)
-                    tname = result.get('target', '?')
-                    self.add_log(f'{unit.name} → {tname} 造成 {dmg} 伤害')
-            self._check_battle_end()
-            self._update_grid()
+                        dmg = result.get('damage', 0)
+                        tname = result.get('target', '?')
+                        self.add_log(f'{unit.name} → {tname} 造成 {dmg} 伤害')
+                self._check_battle_end()
+                self._update_grid()
+        except Exception as e:
+            self.add_log(f'[ERROR] {e}')
         return True
 
     def _check_battle_end(self):
