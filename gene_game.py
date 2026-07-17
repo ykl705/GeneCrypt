@@ -1990,7 +1990,11 @@ class BattleCard:
 
 
 class Enemy:
+    _counter = 0
+
     def __init__(self, enemy_data, scale=1.0, position=0, grid_size=3):
+        Enemy._counter += 1
+        self.id = f'enemy_{Enemy._counter}'
         self.name = enemy_data['name']
         self.max_health = int(enemy_data['health'] * scale)
         self.current_health = self.max_health
