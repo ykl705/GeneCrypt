@@ -8,7 +8,8 @@ from kivy.uix.popup import Popup
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.metrics import dp
-from battle_config import BATTLE_CONFIG, ENEMY_TEMPLATES
+from kivy.graphics import Color, Rectangle, Line
+from functools import partial
 
 
 class BattleScreen(Screen):
@@ -16,7 +17,7 @@ class BattleScreen(Screen):
         super().__init__(**kwargs)
         self._battle_system = None
         self._battle_running = False
-        self._unit_cells = {}
+        self._grid_widgets = {}
         self._build_ui()
 
     def _build_ui(self):
@@ -58,7 +59,6 @@ class BattleScreen(Screen):
         self.add_widget(main)
         self._selected_stage = 1
         self._team = {}
-        self._pending_card = None
 
     def on_enter(self):
         pass
@@ -93,104 +93,43 @@ class BattleScreen(Screen):
 
     def _show_team_select(self):
         app = App.get_running_app()
-        content = BoxLayout(orientation='vertical', spacing=dp(8), padding=dp(10))
-
-        hint_lbl = Label(text='选择出战卡牌: 点击下方卡牌选中，再点击上方格子放置',
-                         size_hint_y=None, height=dp(30), color=(0.8, 0.8, 0.8, 1))
-        content.add_widget(hint_lbl)
-
-        self._pending_lbl = Label(text='', size_hint_y=None, height=dp(25),
-                                   color=(0.4, 1, 0.4, 1))
-        content.add_widget(self._pending_lbl)
-
-        grid_label = Label(text='[ 出战阵型 - 点击格子放置/移除 ]', size_hint_y=None,
-                            height=dp(25), color=(1, 1, 1, 1))
-        content.add_widget(grid_label)
-
-        self._grid_btns = {}
-        grid = GridLayout(cols=3, spacing=dp(4), size_hint_y=None, height=dp(210))
-        for pos in range(9):
-            card_at_pos = self._team.get(pos)
-            text = f'[{pos+1}] {card_at_pos.name}' if card_at_pos else f'[空{pos+1}]'
-            color = (0.3, 0.8, 1, 1) if card_at_pos else (0.4, 0.4, 0.4, 1)
-            btn = Button(text=text, size_hint=(1, None), height=dp(60),
-                         background_color=color, halign='center')
-            btn.bind(on_press=lambda _, p=pos: self._grid_cell_clicked(p))
-            grid.add_widget(btn)
-            self._grid_btns[pos] = btn
-        content.add_widget(grid)
-
-        card_label = Label(text='[ 可用卡牌 ]', size_hint_y=None, height=dp(25),
-                            color=(1, 1, 1, 1))
-        content.add_widget(card_label)
-
-        sv = ScrollView(size_hint_y=0.4)
+        content = BoxLayout(orientation='vertical', spacing=dp(5))
+        content.add_widget(Label(text='选择出战卡牌 (点击选择, 最多3张)'))
+        sv = ScrollView()
         inner = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(2))
         inner.bind(minimum_height=inner.setter('height'))
         for card in app.game.cards:
             if not card.is_alive:
                 continue
-            in_team = any(card.id == (c2.id if c2 else None) for c2 in self._team.values())
-            prefix = '[已上阵] ' if in_team else ''
-            btn = Button(
-                text=f'{prefix}{card.name} ATK:{card.traits.get("attack",0)} HP:{card.traits.get("health",0)}',
-                size_hint_y=None, height=dp(36))
-            btn.bind(on_press=lambda _, c=card: self._pick_card(c))
+            btn = Button(text=f'{card.name} [ATK:{card.traits.get("attack",0)} HP:{card.traits.get("health",0)}]',
+                         size_hint_y=None, height=dp(40))
+            btn.bind(on_press=lambda _, c=card: self._toggle_team_card(c))
             inner.add_widget(btn)
         sv.add_widget(inner)
         content.add_widget(sv)
-
-        btn_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(44), spacing=dp(10))
-        confirm = Button(text='确认编队')
-        clear = Button(text='清空全部')
+        btn_row = BoxLayout(orientation='horizontal', size_hint_y=0.15, spacing=dp(10))
+        confirm = Button(text='确认')
+        clear = Button(text='清空')
         btn_row.add_widget(confirm)
         btn_row.add_widget(clear)
         content.add_widget(btn_row)
-
-        popup = Popup(title='选择队伍', content=content, size_hint=(0.8, 0.85))
-        confirm.bind(on_press=lambda _: popup.dismiss())
-        clear.bind(on_press=lambda _: self._clear_team_ui())
+        popup = Popup(title='选择队伍', content=content, size_hint=(0.6, 0.7))
+        confirm.bind(on_press=popup.dismiss)
+        clear.bind(on_press=lambda _: self._clear_team())
         popup.open()
 
-    def _pick_card(self, card):
-        self._pending_card = card
-        self._pending_lbl.text = f'已选中: {card.name} (点击上方格子放置)'
+    def _toggle_team_card(self, card):
+        if card.id in self._team:
+            del self._team[card.id]
+        elif len(self._team) < 3:
+            self._team[card.id] = card
+        self._team_btn.text = f'队伍: {len(self._team)}/3'
 
-    def _grid_cell_clicked(self, pos):
-        if self._pending_card:
-            self._team[pos] = self._pending_card
-            self._pending_card = None
-            self._pending_lbl.text = ''
-            self._refresh_team_ui()
-            self._team_btn.text = f'队伍: {len(self._team)}/3'
-        elif pos in self._team:
-            del self._team[pos]
-            self._refresh_team_ui()
-            self._team_btn.text = f'队伍: {len(self._team)}/3'
-
-    def _refresh_team_ui(self):
-        for pos, btn in self._grid_btns.items():
-            card_at_pos = self._team.get(pos)
-            btn.text = f'[{pos+1}] {card_at_pos.name}' if card_at_pos else f'[空{pos+1}]'
-            btn.background_color = (0.3, 0.8, 1, 1) if card_at_pos else (0.4, 0.4, 0.4, 1)
-
-    def _clear_team_ui(self):
+    def _clear_team(self):
         self._team = {}
-        self._pending_card = None
-        self._pending_lbl.text = ''
-        self._refresh_team_ui()
         self._team_btn.text = '选择队伍'
 
     def _start_battle(self):
-        try:
-            self._start_battle_impl()
-        except Exception as e:
-            import traceback
-            err_msg = f'战斗初始化失败:\n{str(e)[:200]}'
-            popup = Popup(title='错误', content=Label(text=err_msg), size_hint=(0.7, 0.35))
-            popup.open()
-
-    def _start_battle_impl(self):
         if not self._team:
             popup = Popup(title='错误', content=Label(text='请选择队伍'), size_hint=(0.5, 0.3))
             popup.open()
@@ -204,38 +143,25 @@ class BattleScreen(Screen):
         app = App.get_running_app()
         stage = STAGES[self._selected_stage]
         from gene_game import BattleSystem
-        grid = {pos: card for pos, card in self._team.items()}
+        grid = {i: card for i, (cid, card) in enumerate(self._team.items())}
         enemy_data_raw = stage.get('enemies', stage.get('waves', []))
         enemy_data = []
-        if enemy_data_raw and isinstance(enemy_data_raw, list):
-            first = enemy_data_raw[0] if enemy_data_raw else None
-            if isinstance(first, dict) and 'name' in first:
-                enemy_data = [dict(e) for e in enemy_data_raw]
-            else:
-                for wave_entry in enemy_data_raw:
-                    entries = wave_entry.get('enemies', [wave_entry]) if isinstance(wave_entry, dict) else wave_entry
-                    if isinstance(entries, list):
-                        for e in entries:
-                            if isinstance(e, dict) and 'name' in e:
-                                enemy_data.append(dict(e))
-                            elif isinstance(e, str):
-                                from battle_config import ENEMY_TEMPLATES
-                                tmpl = ENEMY_TEMPLATES.get(e)
-                                if tmpl:
-                                    ed = {
-                                        'name': tmpl['name'],
-                                        'health': int(tmpl.get('base_health', 100)),
-                                        'attack': int(tmpl.get('base_attack', 10)),
-                                        'defense': int(tmpl.get('base_defense', 5)),
-                                        'speed': int(tmpl.get('base_speed', 10)),
-                                        'skills': [],
-                                        'passive_abilities': tmpl.get('passive_abilities', []),
-                                        'width': 1, 'height': 1,
-                                    }
-                                    enemy_data.append(ed)
+        if enemy_data_raw and isinstance(enemy_data_raw[0], dict) and 'name' in enemy_data_raw[0]:
+            enemy_data = [dict(e) for e in enemy_data_raw]
+        else:
+            for wave_entry in enemy_data_raw:
+                entries = wave_entry.get('enemies', [wave_entry]) if isinstance(wave_entry, dict) else wave_entry
+                for e in entries:
+                    if isinstance(e, dict) and 'name' in e:
+                        enemy_data.append(dict(e))
+                    elif isinstance(e, str):
+                        from battle_config import ENEMY_TEMPLATES
+                        tmpl = ENEMY_TEMPLATES.get(e)
+                        if tmpl:
+                            enemy_data.append(dict(tmpl))
         if not enemy_data:
             enemy_data = [{'name': '测试敌人', 'health': 50, 'attack': 10, 'defense': 5, 'speed': 8,
-                           'skills': [], 'passive_abilities': [], 'width': 1, 'height': 1, 'position': 0}]
+                           'skills': [], 'passives': [], 'width': 1, 'height': 1, 'position': 0}]
         stage_num = self._selected_stage
         skill_enhance = app.game.tech_tree.get('skill_enhance', {}).get('level', 0)
         self._battle_system = BattleSystem(grid, enemy_data, stage_num=stage_num,
@@ -248,184 +174,111 @@ class BattleScreen(Screen):
 
     def _render_battle_grid(self):
         self._battle_area.clear_widgets()
-        self._unit_cells = {}
+        self._grid_widgets = {}
         bs = self._battle_system
-        gs = 3
-
-        grid_container = BoxLayout(orientation='horizontal', spacing=dp(15))
-
-        # --- Player Side ---
+        grid_container = BoxLayout(orientation='horizontal', spacing=dp(20))
         player_side = BoxLayout(orientation='vertical', size_hint_x=0.5, spacing=dp(2))
-        player_side.add_widget(Label(text='我方', color=(0.3, 0.8, 1, 1), size_hint_y=None, height=dp(22)))
-        pg = GridLayout(cols=gs, spacing=dp(2), size_hint_y=0.95)
-        player_map = {u.position: u for u in bs.player_team}
-        for pos in range(gs * gs):
-            unit = player_map.get(pos)
-            cell = self._make_cell(unit, is_player=True)
+        player_side.add_widget(Label(text='我方', color=(0.3, 0.8, 1, 1), size_hint_y=0.1))
+        pg = GridLayout(cols=bs.grid_size, spacing=dp(2), size_hint_y=0.9)
+        for unit in bs.player_team:
+            cell = self._create_unit_cell(unit)
             pg.add_widget(cell)
-            if unit is not None:
-                self._unit_cells[unit.id] = cell
+            self._grid_widgets[unit.id] = cell
         player_side.add_widget(pg)
         grid_container.add_widget(player_side)
 
-        # --- Enemy Side ---
         enemy_side = BoxLayout(orientation='vertical', size_hint_x=0.5, spacing=dp(2))
-        enemy_side.add_widget(Label(text='敌方', color=(1, 0.3, 0.3, 1), size_hint_y=None, height=dp(22)))
-        eg = GridLayout(cols=gs, spacing=dp(2), size_hint_y=0.95)
-        enemy_map = {}
-        for u in bs.enemies:
-            ops = u.occupied_positions if u.occupied_positions else [u.position]
-            for op in ops:
-                enemy_map[op] = u
-        for pos in range(gs * gs):
-            unit = enemy_map.get(pos)
-            cell = self._make_cell(unit, is_player=False)
+        enemy_side.add_widget(Label(text='敌方', color=(1, 0.3, 0.3, 1), size_hint_y=0.1))
+        eg = GridLayout(cols=bs.enemy_grid_size, spacing=dp(2), size_hint_y=0.9)
+        for unit in bs.enemies:
+            cell = self._create_unit_cell(unit)
             eg.add_widget(cell)
-            if unit is not None and pos == unit.position:
-                self._unit_cells[unit.id] = cell
+            self._grid_widgets[unit.id] = cell
         enemy_side.add_widget(eg)
         grid_container.add_widget(enemy_side)
-
         self._battle_area.add_widget(grid_container)
 
-    def _make_cell(self, unit, is_player):
+    def _create_unit_cell(self, unit):
         cell = BoxLayout(orientation='vertical', spacing=dp(1), padding=dp(2))
         cell.size_hint = (1, None)
-        cell.height = dp(74)
-        cell._unit = unit
-
-        if unit is None:
-            cell.add_widget(Label(text='', color=(0.2, 0.2, 0.25, 1)))
-            return cell
-
-        name_color = (0.3, 0.8, 1, 1) if is_player else (1, 0.4, 0.4, 1)
-        name_lbl = Label(text=unit.name[:6], size_hint_y=0.28, color=name_color, font_size=dp(9),
-                         bold=True, halign='center')
+        cell.height = dp(90)
+        name_color = (0.3, 0.8, 1, 1) if unit.is_player else (1, 0.3, 0.3, 1)
+        name_lbl = Label(text=unit.name, size_hint_y=0.2, color=name_color, font_size=dp(10))
         cell.add_widget(name_lbl)
 
-        hp_pct = unit.current_health / max(unit.max_health, 1)
-        hp_color = (0.3, 1, 0.3, 1) if hp_pct > 0.3 else (1, 0.3, 0.3, 1)
-        cell._hp_lbl = Label(text=f'HP:{unit.current_health}/{unit.max_health}',
-                             size_hint_y=0.24, font_size=dp(8), color=hp_color)
-        cell.add_widget(cell._hp_lbl)
+        hp_bar = BoxLayout(orientation='horizontal', size_hint_y=0.15, spacing=dp(2))
+        hp_bar.add_widget(Label(text='HP', size_hint_x=0.2, font_size=dp(8), color=(1, 1, 1, 1)))
+        hp_fill = Label(text=f'{unit.current_health}/{unit.max_health}', size_hint_x=0.8,
+                        font_size=dp(8), color=(0.3, 1, 0.3, 1))
+        hp_bar.add_widget(hp_fill)
+        cell.add_widget(hp_bar)
 
-        atk_str = f'ATK:{unit.attack} SPD:{unit.speed}'
-        cell._atk_lbl = Label(text=atk_str, size_hint_y=0.24, font_size=dp(8),
-                              color=(0.8, 0.8, 0.8, 1))
-        cell.add_widget(cell._atk_lbl)
-
+        action_bar = BoxLayout(orientation='horizontal', size_hint_y=0.15, spacing=dp(2))
+        action_bar.add_widget(Label(text='ATB', size_hint_x=0.2, font_size=dp(8), color=(1, 1, 1, 1)))
         from battle_config import BATTLE_CONFIG
         max_bar = BATTLE_CONFIG['action_bar_max']
-        ab = min(unit.action_bar / max_bar, 1.0) if max_bar > 0 else 0
-        cell._atb_lbl = Label(text=f'ATB:{ab*100:.0f}%', size_hint_y=0.24, font_size=dp(8),
-                              color=(0.9, 0.9, 0, 1))
-        cell.add_widget(cell._atb_lbl)
+        ab = min(unit.action_bar / max_bar, 1.0)
+        ab_lbl = Label(text=f'{ab*100:.0f}%', size_hint_x=0.8, font_size=dp(8), color=(0.8, 0.8, 0, 1))
+        action_bar.add_widget(ab_lbl)
+        cell.add_widget(action_bar)
 
+        atk_lbl = Label(text=f'ATK:{unit.attack} SPD:{unit.speed}',
+                        size_hint_y=0.2, font_size=dp(8), color=(0.8, 0.8, 0.8, 1))
+        cell.add_widget(atk_lbl)
         return cell
 
     def _battle_tick(self, dt):
         if not self._battle_running:
             return False
-        try:
-            bs = self._battle_system
-            if bs is None or not bs.is_running:
-                self._battle_running = False
-                return False
-            bs.update_action_bars_frame()
-            bs.update_status_damage()
-            bs.process_enemy_passives()
-            bs.cleanup_summons()
-            if bs.check_winner():
-                self._battle_running = False
-                self._update_all_cells()
-                if bs.winner == 'player':
-                    self.add_log('🎉 战斗胜利!')
-                    self._handle_victory()
-                else:
-                    self.add_log('💀 战斗失败...')
-                return False
-
-            unit = bs.get_next_unit()
-            if unit:
-        from battle_config import BATTLE_CONFIG as _BC
-        max_bar_val = _BC['action_bar_max']
+        bs = self._battle_system
+        if not bs.is_running:
+            self._battle_running = False
+            return False
+        bs.update_action_bars_frame()
+        unit = bs.get_next_unit()
+        if unit:
+            if unit.is_player and not bs.is_auto:
+                from battle_config import BATTLE_CONFIG as _BC
+                max_bar_val = _BC['action_bar_max']
                 unit.action_bar -= max_bar_val
-
-                if unit.is_player and not bs.is_auto:
-                    if bs.marked_target:
-                        target = bs.marked_target
-                        bs.marked_target = None
-                    else:
-                        front = [e for e in bs.enemies if e.is_alive]
-                        target = front[0] if front else None
-                    if target:
-                        result = bs.execute_turn(unit, [target])
-                        self._animate_attack(unit, target)
-                        if result:
-                            dmg = result.get('damage', 0)
-                            self.add_log(f'{unit.name} → {target.name} 造成 {dmg} 伤害')
-                            if not target.is_alive:
-                                self.add_log(f'{target.name} 被击败!')
+                if bs.marked_target:
+                    target = bs.marked_target
+                    bs.marked_target = None
                 else:
-                    result = bs.execute_turn(unit, None)
+                    front = [e for e in bs.enemies if e.is_alive]
+                    target = front[0] if front else None
+                if target:
+                    result = bs.execute_turn(unit, [target])
                     if result:
-                        dmg = result.get('damage', 0)
-                        tname = result.get('target', '?')
-                        self.add_log(f'{unit.name} → {tname} 造成 {dmg} 伤害')
-
-            self._update_all_cells()
-        except Exception as e:
-            self.add_log(f'[ERROR] {e}')
+                        self.add_log(f'{unit.name} → {target.name} 造成 {result.get("damage", 0)} 伤害')
+                        if not target.is_alive:
+                            self.add_log(f'{target.name} 被击败!')
+            else:
+                result = bs.execute_turn(unit, None)
+                if result:
+                    dmg = result.get('damage', 0)
+                    tname = result.get('target', '?')
+                    self.add_log(f'{unit.name} → {tname} 造成 {dmg} 伤害')
+            self._check_battle_end()
+            self._update_grid()
         return True
 
-    def _animate_attack(self, attacker, target):
-        atk_cell = self._unit_cells.get(attacker.id)
-        tgt_cell = self._unit_cells.get(target.id)
-        if atk_cell:
-            atk_cell.opacity = 0.4
-            Clock.schedule_once(lambda dt: setattr(atk_cell, 'opacity', 1.0), 0.15)
-        if tgt_cell:
-            tgt_cell.opacity = 0.4
-            Clock.schedule_once(lambda dt: setattr(tgt_cell, 'opacity', 1.0), 0.2)
-
-    def _update_all_cells(self):
+    def _check_battle_end(self):
         bs = self._battle_system
-        if bs is None:
-            return
-        from battle_config import BATTLE_CONFIG
-        max_bar = BATTLE_CONFIG['action_bar_max']
-        for uid, cell in list(self._unit_cells.items()):
-            unit = None
-            for u in bs._all_units_cache:
-                if u.id == uid:
-                    unit = u
-                    break
-            if unit is None:
-                continue
-            cell._unit = unit
-            hp_pct = unit.current_health / max(unit.max_health, 1)
-            if hasattr(cell, '_hp_lbl') and cell._hp_lbl:
-                cell._hp_lbl.text = f'HP:{unit.current_health}/{unit.max_health}'
-                cell._hp_lbl.color = (0.3, 1, 0.3, 1) if hp_pct > 0.3 else (1, 0.3, 0.3, 1)
-            if hasattr(cell, '_atb_lbl') and cell._atb_lbl:
-                ab = min(unit.action_bar / max_bar, 1.0) if max_bar > 0 else 0
-                cell._atb_lbl.text = f'ATB:{ab*100:.0f}%'
-            if not unit.is_alive:
-                cell.opacity = 0.25
-
-    def _toggle_auto(self):
-        if self._battle_system:
-            self._battle_system.is_auto = not self._battle_system.is_auto
-            self._auto_btn.text = '自动: ON' if self._battle_system.is_auto else '自动: OFF'
-
-    def _exit_battle(self):
-        self._battle_running = False
-        if self._battle_system:
-            self._battle_system.is_running = False
-        self._battle_area.clear_widgets()
-        self._battle_area.add_widget(Label(text='退出战斗', color=(0.5, 0.5, 0.5, 1)))
-        self.add_log('已退出战斗')
-        self._unit_cells = {}
+        alive_players = [u for u in bs.player_team if u.is_alive]
+        alive_enemies = [u for u in bs.enemies if u.is_alive]
+        if not alive_enemies:
+            bs.is_running = False
+            self._battle_running = False
+            self.add_log('🎉 战斗胜利!')
+            self._handle_victory()
+            return True
+        if not alive_players:
+            bs.is_running = False
+            self._battle_running = False
+            self.add_log('💀 战斗失败...')
+            return True
+        return False
 
     def _handle_victory(self):
         app = App.get_running_app()
@@ -446,6 +299,35 @@ class BattleScreen(Screen):
         reward_text = f'奖励: 🧬+{gacha_reward} 🧱+{mat_reward}'
         self._reward_box.add_widget(Label(text=reward_text, color=(1, 1, 0.6, 1)))
 
+    def _update_grid(self):
+        for uid, cell in self._grid_widgets.items():
+            if uid in self._battle_system._all_units_cache:
+                unit = next((u for u in self._battle_system._all_units_cache if u.id == uid), None)
+                if unit:
+                    children = cell.children
+                    if len(children) >= 2:
+                        hp_lbl = children[-2] if len(children) > 1 else None
+                        if hp_lbl and hasattr(hp_lbl, 'children'):
+                            hp_text = [c for c in hp_lbl.children if isinstance(c, Label)]
+                            if hp_text:
+                                hp_text[0].text = f'{unit.current_health}/{unit.max_health}'
+                                hp_text[0].color = (0.3, 1, 0.3, 1) if unit.current_health > unit.max_health * 0.3 else (1, 0.3, 0.3, 1)
+                    if not unit.is_alive:
+                        cell.opacity = 0.3
+
+    def _toggle_auto(self):
+        if self._battle_system:
+            self._battle_system.is_auto = not self._battle_system.is_auto
+            self._auto_btn.text = '自动: ON' if self._battle_system.is_auto else '自动: OFF'
+
+    def _exit_battle(self):
+        self._battle_running = False
+        if self._battle_system:
+            self._battle_system.is_running = False
+        self._battle_area.clear_widgets()
+        self._battle_area.add_widget(Label(text='退出战斗', color=(0.5, 0.5, 0.5, 1)))
+        self.add_log('已退出战斗')
+
     def add_log(self, msg):
-        self._log.add_widget(Label(text=str(msg), size_hint_y=None, height=dp(20),
-                                    font_size=dp(11), color=(0.8, 0.8, 0.8, 1)))
+        self._log.add_widget(Label(text=msg, size_hint_y=None, height=dp(20), font_size=dp(11),
+                                    color=(0.8, 0.8, 0.8, 1)))
