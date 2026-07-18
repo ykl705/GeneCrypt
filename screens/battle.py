@@ -132,14 +132,17 @@ class BattleScreen(Screen):
             btn.bind(on_press=self._on_card_pick)
             inner.add_widget(btn)
         sv.add_widget(inner)
-        content.add_widget(sv)
+
+        bottom = BoxLayout(orientation='vertical', size_hint_y=1, spacing=dp(4))
+        bottom.add_widget(sv)
 
         btn_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(44), spacing=dp(10))
         confirm = Button(text='确认编队')
         clear = Button(text='清空全部')
         btn_row.add_widget(confirm)
         btn_row.add_widget(clear)
-        content.add_widget(btn_row)
+        bottom.add_widget(btn_row)
+        content.add_widget(bottom)
 
         popup = Popup(title='选择队伍', content=content, size_hint=(0.8, 0.85))
         confirm.bind(on_press=lambda _: popup.dismiss())
@@ -280,7 +283,7 @@ class BattleScreen(Screen):
         from kivy.graphics import Color as GfxColor, Rectangle
         cell = BoxLayout(orientation='vertical', spacing=dp(1), padding=dp(3))
         cell.size_hint = (1, None)
-        cell.height = dp(82)
+        cell.height = dp(78)
 
         with cell.canvas.before:
             if unit is None:
@@ -303,11 +306,11 @@ class BattleScreen(Screen):
 
         nc = (0.2, 0.7, 1, 1) if is_player else (1, 0.3, 0.3, 1)
 
-        header = BoxLayout(orientation='horizontal', size_hint_y=0.22, spacing=dp(1))
-        header.add_widget(Label(text=unit.name[:6], color=nc, font_size=dp(9), bold=True,
-                                size_hint_x=0.65, halign='left'))
-        header.add_widget(Label(text=f'SPD:{unit.speed}', color=(0.7, 0.7, 0.7, 1),
-                                font_size=dp(7), size_hint_x=0.35))
+        header = BoxLayout(orientation='horizontal', size_hint_y=0.18, spacing=dp(1))
+        header.add_widget(Label(text=unit.name[:5], color=nc, font_size=dp(8), bold=True,
+                                size_hint_x=0.6, halign='left'))
+        header.add_widget(Label(text=f'SPD{unit.speed}', color=(0.7, 0.7, 0.7, 1),
+                                font_size=dp(7), size_hint_x=0.4))
         cell.add_widget(header)
 
         hp_pct = unit.current_health / max(unit.max_health, 1)
@@ -318,12 +321,12 @@ class BattleScreen(Screen):
         else:
             hp_c = (1, 0.2, 0.2, 1)
 
-        hp_box = BoxLayout(orientation='vertical', size_hint_y=0.22, spacing=dp(0))
-        cell._hp_lbl = Label(text=f'HP {unit.current_health}/{unit.max_health}',
-                             font_size=dp(7), color=hp_c, size_hint_y=0.7)
+        hp_box = BoxLayout(orientation='vertical', size_hint_y=0.2, spacing=dp(0))
+        cell._hp_lbl = Label(text=f'HP{unit.current_health}/{unit.max_health}',
+                             font_size=dp(7), color=hp_c, size_hint_y=0.6)
         hp_box.add_widget(cell._hp_lbl)
 
-        bar_box = BoxLayout(size_hint_y=0.3)
+        bar_box = BoxLayout(size_hint_y=0.4)
         cell._bar_box = bar_box
         with bar_box.canvas.before:
             GfxColor(0.2, 0.2, 0.2, 1)
@@ -344,14 +347,14 @@ class BattleScreen(Screen):
                              font_size=dp(7), size_hint_x=0.5))
         cell.add_widget(mid)
 
-        atb_box = BoxLayout(orientation='vertical', size_hint_y=0.18, spacing=dp(0))
+        atb_box = BoxLayout(orientation='vertical', size_hint_y=0.16, spacing=dp(0))
         max_bar = BATTLE_CONFIG['action_bar_max']
         ab = min(unit.action_bar / max_bar, 1.0) if max_bar > 0 else 0
-        cell._atb_lbl = Label(text=f'ATB {ab*100:.0f}%', font_size=dp(7),
-                              color=(0.7, 0.7, 0, 1), size_hint_y=0.6)
+        cell._atb_lbl = Label(text=f'ATB{ab*100:.0f}%', font_size=dp(7),
+                              color=(0.7, 0.7, 0, 1), size_hint_y=0.55)
         atb_box.add_widget(cell._atb_lbl)
 
-        atb_fill = BoxLayout(size_hint_y=0.4)
+        atb_fill = BoxLayout(size_hint_y=0.45)
         cell._atb_box = atb_fill
         with atb_fill.canvas.before:
             GfxColor(0.2, 0.2, 0.2, 1)
@@ -473,11 +476,11 @@ class BattleScreen(Screen):
             else:
                 hp_c = (1, 0.2, 0.2, 1)
             if hasattr(cell, '_hp_lbl') and cell._hp_lbl:
-                cell._hp_lbl.text = f'HP {unit.current_health}/{unit.max_health}'
+                cell._hp_lbl.text = f'HP{unit.current_health}/{unit.max_health}'
                 cell._hp_lbl.color = hp_c
             if hasattr(cell, '_atb_lbl') and cell._atb_lbl:
                 ab = min(unit.action_bar / max_bar, 1.0) if max_bar > 0 else 0
-                cell._atb_lbl.text = f'ATB {ab*100:.0f}%'
+                cell._atb_lbl.text = f'ATB{ab*100:.0f}%'
             bf = getattr(cell, '_bar_fill', None)
             if bf and hasattr(cell, '_bar_box') and cell._bar_box:
                 bw = cell._bar_box.width
