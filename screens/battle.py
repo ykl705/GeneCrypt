@@ -132,17 +132,14 @@ class BattleScreen(Screen):
             btn.bind(on_press=self._on_card_pick)
             inner.add_widget(btn)
         sv.add_widget(inner)
-
-        bottom = BoxLayout(orientation='vertical', size_hint_y=1, spacing=dp(4))
-        bottom.add_widget(sv)
+        content.add_widget(sv)
 
         btn_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(44), spacing=dp(10))
         confirm = Button(text='确认编队')
         clear = Button(text='清空全部')
         btn_row.add_widget(confirm)
         btn_row.add_widget(clear)
-        bottom.add_widget(btn_row)
-        content.add_widget(bottom)
+        content.add_widget(btn_row)
 
         popup = Popup(title='选择队伍', content=content, size_hint=(0.8, 0.85))
         confirm.bind(on_press=lambda _: popup.dismiss())
@@ -281,9 +278,9 @@ class BattleScreen(Screen):
 
     def _make_cell(self, unit, is_player):
         from kivy.graphics import Color as GfxColor, Rectangle
-        cell = BoxLayout(orientation='vertical', spacing=dp(1), padding=dp(3))
+        cell = BoxLayout(orientation='vertical', spacing=dp(0), padding=dp(2))
         cell.size_hint = (1, None)
-        cell.height = dp(78)
+        cell.height = dp(72)
 
         with cell.canvas.before:
             if unit is None:
@@ -296,22 +293,13 @@ class BattleScreen(Screen):
 
         if unit is None:
             cell.add_widget(Label(text='', color=(0.05, 0.05, 0.08, 1)))
+            cell._hp_bar = None
             cell._hp_lbl = None
+            cell._atb_bar = None
             cell._atb_lbl = None
-            cell._bar_box = None
-            cell._bar_fill = None
-            cell._atb_box = None
-            cell._atb_fill = None
             return cell
 
         nc = (0.2, 0.7, 1, 1) if is_player else (1, 0.3, 0.3, 1)
-
-        header = BoxLayout(orientation='horizontal', size_hint_y=0.18, spacing=dp(1))
-        header.add_widget(Label(text=unit.name[:5], color=nc, font_size=dp(8), bold=True,
-                                size_hint_x=0.6, halign='left'))
-        header.add_widget(Label(text=f'SPD{unit.speed}', color=(0.7, 0.7, 0.7, 1),
-                                font_size=dp(7), size_hint_x=0.4))
-        cell.add_widget(header)
 
         hp_pct = unit.current_health / max(unit.max_health, 1)
         if hp_pct > 0.5:
@@ -321,51 +309,51 @@ class BattleScreen(Screen):
         else:
             hp_c = (1, 0.2, 0.2, 1)
 
-        hp_box = BoxLayout(orientation='vertical', size_hint_y=0.2, spacing=dp(0))
+        row1 = BoxLayout(orientation='horizontal', size_hint_y=0.17, spacing=dp(2))
+        row1.add_widget(Label(text=unit.name[:5], color=nc, font_size=dp(8), bold=True,
+                              size_hint_x=0.55, halign='left', valign='middle'))
+        row1.add_widget(Label(text=f'SPD{unit.speed}', color=(0.7, 0.7, 0.7, 1),
+                              font_size=dp(7), size_hint_x=0.45, halign='right'))
+        cell.add_widget(row1)
+
+        row2 = BoxLayout(orientation='horizontal', size_hint_y=0.14, spacing=dp(2))
         cell._hp_lbl = Label(text=f'HP{unit.current_health}/{unit.max_health}',
-                             font_size=dp(7), color=hp_c, size_hint_y=0.6)
-        hp_box.add_widget(cell._hp_lbl)
+                             font_size=dp(7), color=hp_c, size_hint_x=0.55, halign='left')
+        row2.add_widget(cell._hp_lbl)
+        row2.add_widget(Label(text=f'ATK{unit.attack}', color=(1, 0.7, 0.3, 1),
+                              font_size=dp(7), size_hint_x=0.45, halign='right'))
+        cell.add_widget(row2)
 
-        bar_box = BoxLayout(size_hint_y=0.4)
-        cell._bar_box = bar_box
-        with bar_box.canvas.before:
+        bar1 = BoxLayout(size_hint_y=0.06, spacing=dp(0))
+        cell._hp_bar = bar1
+        with bar1.canvas.before:
             GfxColor(0.2, 0.2, 0.2, 1)
-            bar_box._bg_rect = Rectangle(pos=bar_box.pos, size=bar_box.size)
+            bar1._bg = Rectangle(pos=bar1.pos, size=bar1.size)
             GfxColor(*hp_c[:3], 1)
-            bar_box._fill_rect = Rectangle(pos=bar_box.pos,
-                                           size=(bar_box.width * hp_pct, bar_box.height))
-        bar_box.bind(pos=self._update_bar_bg, size=self._update_bar_bg)
-        cell._bar_fill = bar_box._fill_rect
-        hp_box.add_widget(bar_box)
-        cell.add_widget(hp_box)
+            bar1._fill = Rectangle(pos=bar1.pos, size=(bar1.width * hp_pct, bar1.height))
+        bar1.bind(pos=self._update_bar, size=self._update_bar)
+        cell.add_widget(bar1)
 
-        mid = BoxLayout(orientation='horizontal', size_hint_y=0.18, spacing=dp(1))
-        mid.add_widget(Label(text=f'ATK:{unit.attack}', color=(1, 0.7, 0.3, 1),
-                             font_size=dp(7), size_hint_x=0.5))
+        row3 = BoxLayout(orientation='horizontal', size_hint_y=0.14, spacing=dp(2))
         d = unit.defense if hasattr(unit, 'defense') else 0
-        mid.add_widget(Label(text=f'DEF:{d}', color=(0.5, 0.7, 1, 1),
-                             font_size=dp(7), size_hint_x=0.5))
-        cell.add_widget(mid)
-
-        atb_box = BoxLayout(orientation='vertical', size_hint_y=0.16, spacing=dp(0))
+        row3.add_widget(Label(text=f'DEF{d}', color=(0.5, 0.7, 1, 1),
+                              font_size=dp(7), size_hint_x=0.55, halign='left'))
         max_bar = BATTLE_CONFIG['action_bar_max']
         ab = min(unit.action_bar / max_bar, 1.0) if max_bar > 0 else 0
         cell._atb_lbl = Label(text=f'ATB{ab*100:.0f}%', font_size=dp(7),
-                              color=(0.7, 0.7, 0, 1), size_hint_y=0.55)
-        atb_box.add_widget(cell._atb_lbl)
+                              color=(0.7, 0.7, 0, 1), size_hint_x=0.45, halign='right')
+        row3.add_widget(cell._atb_lbl)
+        cell.add_widget(row3)
 
-        atb_fill = BoxLayout(size_hint_y=0.45)
-        cell._atb_box = atb_fill
-        with atb_fill.canvas.before:
+        bar2 = BoxLayout(size_hint_y=0.06, spacing=dp(0))
+        cell._atb_bar = bar2
+        with bar2.canvas.before:
             GfxColor(0.2, 0.2, 0.2, 1)
-            atb_fill._bg_rect = Rectangle(pos=atb_fill.pos, size=atb_fill.size)
+            bar2._bg = Rectangle(pos=bar2.pos, size=bar2.size)
             GfxColor(0.6, 0.6, 0, 1)
-            atb_fill._fill_rect = Rectangle(pos=atb_fill.pos,
-                                            size=(atb_fill.width * ab, atb_fill.height))
-        atb_fill.bind(pos=self._update_bar_bg, size=self._update_bar_bg)
-        cell._atb_fill = atb_fill._fill_rect
-        atb_box.add_widget(atb_fill)
-        cell.add_widget(atb_box)
+            bar2._fill = Rectangle(pos=bar2.pos, size=(bar2.width * ab, bar2.height))
+        bar2.bind(pos=self._update_bar, size=self._update_bar)
+        cell.add_widget(bar2)
 
         skills_text = ','.join(unit.skills[:2]) if unit.skills else '-'
         statuses = []
@@ -374,7 +362,7 @@ class BattleScreen(Screen):
                 statuses.append(k[:1].upper())
         st_text = ' '.join(statuses) if statuses else ''
         cell.add_widget(Label(text=f'{skills_text}  {st_text}', font_size=dp(6),
-                              color=(0.5, 0.5, 0.5, 1), size_hint_y=0.2))
+                              color=(0.5, 0.5, 0.5, 1), size_hint_y=0.16))
 
         return cell
 
@@ -383,13 +371,14 @@ class BattleScreen(Screen):
             instance._bg_rect.pos = instance.pos
             instance._bg_rect.size = instance.size
 
-    def _update_bar_bg(self, instance, value):
-        if hasattr(instance, '_bg_rect'):
-            instance._bg_rect.pos = instance.pos
-            instance._bg_rect.size = instance.size
-        if hasattr(instance, '_fill_rect'):
-            instance._fill_rect.pos = instance.pos
-            pw = instance.width
+    def _update_bar(self, instance, value):
+        if hasattr(instance, '_bg'):
+            instance._bg.pos = instance.pos
+            instance._bg.size = instance.size
+        if hasattr(instance, '_fill'):
+            instance._fill.pos = instance.pos
+            pw = max(instance.width, 1)
+            instance._fill.size = (instance._fill.size[0], instance.height)
 
     def _battle_tick(self, dt):
         if not self._battle_running:
@@ -481,15 +470,19 @@ class BattleScreen(Screen):
             if hasattr(cell, '_atb_lbl') and cell._atb_lbl:
                 ab = min(unit.action_bar / max_bar, 1.0) if max_bar > 0 else 0
                 cell._atb_lbl.text = f'ATB{ab*100:.0f}%'
-            bf = getattr(cell, '_bar_fill', None)
-            if bf and hasattr(cell, '_bar_box') and cell._bar_box:
-                bw = cell._bar_box.width
-                bf.size = (bw * hp_pct, bf.size[1])
-            af = getattr(cell, '_atb_fill', None)
-            if af and hasattr(cell, '_atb_box') and cell._atb_box:
-                aw = cell._atb_box.width
-                ab = min(unit.action_bar / max_bar, 1.0) if max_bar > 0 else 0
-                af.size = (aw * ab, af.size[1])
+            for bar_attr in ('_hp_bar', '_atb_bar'):
+                bar = getattr(cell, bar_attr, None)
+                if bar is None:
+                    continue
+                fill = getattr(bar, '_fill', None)
+                if fill is None:
+                    continue
+                bw = max(bar.width, 1)
+                if bar_attr == '_hp_bar':
+                    fill.size = (bw * hp_pct, bar.height)
+                else:
+                    ab = min(unit.action_bar / max_bar, 1.0) if max_bar > 0 else 0
+                    fill.size = (bw * ab, bar.height)
             if not unit.is_alive:
                 cell.opacity = 0.3
 
