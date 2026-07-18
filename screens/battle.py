@@ -116,7 +116,8 @@ class BattleScreen(Screen):
         content.add_widget(grid)
 
         content.add_widget(Label(text='可用卡牌', size_hint_y=None, height=dp(22), color=(1, 1, 1, 1)))
-        sv = ScrollView(size_hint_y=1, do_scroll_x=False)
+        sv = ScrollView(size_hint_y=1, do_scroll_x=False, bar_width=dp(6),
+                        scroll_type=['bars', 'content'])
         inner = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(2))
         inner.bind(minimum_height=inner.setter('height'))
         for card in app.game.cards:
@@ -126,11 +127,20 @@ class BattleScreen(Screen):
             prefix = '[已上阵] ' if in_t else ''
             atk = card.traits.get('attack', 0)
             hp = card.traits.get('health', 0)
-            btn = Button(text=f'{prefix}{card.name} ATK:{atk} HP:{hp}',
-                         size_hint_y=None, height=dp(36))
-            btn._card = card
-            btn.bind(on_press=self._on_card_pick)
-            inner.add_widget(btn)
+            lbl = Label(text=f'{prefix}{card.name} ATK:{atk} HP:{hp}',
+                         size_hint_y=None, height=dp(36), color=(1, 1, 1, 1),
+                         halign='left', valign='middle')
+            lbl._card = card
+            if in_t:
+                lbl.color = (0.3, 0.8, 1, 1)
+            with lbl.canvas.before:
+                from kivy.graphics import Color as GfxColor, Rectangle
+                GfxColor(0.2, 0.2, 0.25, 1)
+                lbl._bg = Rectangle(pos=lbl.pos, size=lbl.size)
+            lbl.bind(pos=lambda c, v: setattr(c._bg, 'pos', v) if hasattr(c, '_bg') else None,
+                      size=lambda c, v: setattr(c._bg, 'size', v) if hasattr(c, '_bg') else None)
+            inner.add_widget(lbl)
+        inner.bind(on_touch_down=self._card_list_touch)
         sv.add_widget(inner)
         content.add_widget(sv)
 
@@ -145,6 +155,16 @@ class BattleScreen(Screen):
         confirm.bind(on_press=lambda _: popup.dismiss())
         clear.bind(on_press=lambda _: self._do_clear_team())
         popup.open()
+
+    def _card_list_touch(self, instance, touch):
+        for child in instance.children:
+            if child.collide_point(*child.to_widget(*touch.pos)):
+                card = getattr(child, '_card', None)
+                if card:
+                    self._pending_card = card
+                    self._pending_lbl.text = f'已选中: {card.name}'
+                    return True
+        return False
 
     def _on_card_pick(self, btn):
         card = getattr(btn, '_card', None)
