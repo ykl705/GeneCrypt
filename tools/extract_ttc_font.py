@@ -8,7 +8,7 @@ def extract_ttf_from_ttc(ttc_path, ttf_path):
         header = f.read(12)
         if header[:4] != b'ttcf':
             raise ValueError('Not a TTC file')
-        count = read_big_u32(f)
+        count = struct.unpack('>I', header[8:12])[0]
         offsets = [read_big_u32(f) for _ in range(count)]
         f.seek(0)
         full_data = f.read()
