@@ -2008,6 +2008,12 @@ class Enemy:
         self.shield = 0
         self.is_alive = True
         self.is_player = False
+        
+        self.template_key = ''
+        for tid, tmpl in ENEMY_TEMPLATES.items():
+            if tmpl['name'] == self.name:
+                self.template_key = tid
+                break
         self.total_damage_dealt = 0
         self.is_overlord = enemy_data.get('is_overlord', False)
         self.grid_size = grid_size

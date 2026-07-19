@@ -289,29 +289,87 @@ class BattleScreen(Screen):
         player_side.add_widget(pg)
         grid_container.add_widget(player_side)
 
-        enemy_side = BoxLayout(orientation='vertical', size_hint_x=0.55 if enemy_gs > 3 else 0.5, spacing=dp(2))
+        enemy_side = BoxLayout(orientation='vertical',
+                               size_hint_x=0.55 if enemy_gs > 3 else 0.5, spacing=dp(2))
         enemy_side.add_widget(Label(text='敌方', color=(1, 0.3, 0.3, 1), size_hint_y=None, height=dp(20)))
-        eg = GridLayout(cols=enemy_gs, spacing=dp(2) if enemy_gs <= 3 else dp(1), size_hint_y=0.95)
+        spacing = dp(2) if enemy_gs <= 3 else dp(1)
+
+        from kivy.uix.floatlayout import FloatLayout
+        enemy_wrap = FloatLayout(size_hint_y=0.95)
+        eg = GridLayout(cols=enemy_gs, spacing=spacing,
+                        size_hint=(1, 1), pos_hint={'x': 0, 'y': 0})
         emap = {}
+        bosses = []
         for u in bs.enemies:
             ops = u.occupied_positions if u.occupied_positions else [u.position]
             for op in ops:
                 emap[op] = u
+            if u.width > 1 or u.height > 1:
+                bosses.append(u)
         for i in range(enemy_gs * enemy_gs):
             unit = emap.get(i)
-            is_primary = unit is not None and i == unit.position
-            cell = self._make_cell(unit if is_primary else None, is_player=False)
+            is_boss_tile = unit is not None and (unit.width > 1 or unit.height > 1)
+            cell = self._make_cell(unit if not is_boss_tile else None, is_player=False)
             eg.add_widget(cell)
             if unit is not None and i == unit.position:
                 self._unit_cells[unit.id] = cell
-        enemy_side.add_widget(eg)
+        enemy_wrap.add_widget(eg)
+
+        for boss in bosses:
+            self._place_boss_overlay(enemy_wrap, boss, enemy_gs, spacing)
+
+        enemy_side.add_widget(enemy_wrap)
         grid_container.add_widget(enemy_side)
 
         self._battle_area.add_widget(grid_container)
 
+    def _place_boss_overlay(self, wrap, boss, gs, spacing):
+        import os
+        c, r, w, h = boss.col, boss.row, boss.width, boss.height
+        tkey = getattr(boss, 'template_key', '')
+        boss_img_path = os.path.join('assets', 'enemies', f'{tkey}_0.png') if tkey else ''
+
+        from kivy.uix.image import Image as KivyImage
+        from kivy.graphics import Color as GfxColor, Rectangle as GfxRect
+
+        boss_cell = BoxLayout(orientation='vertical',
+                               pos=(0, 0), size=(100, 100),
+                               size_hint=(None, None))
+        with boss_cell.canvas.before:
+            GfxColor(1, 0.15, 0.15, 0.4)
+            boss_cell._bg = GfxRect(pos=boss_cell.pos, size=boss_cell.size)
+        boss_cell.bind(pos=lambda c, v: setattr(c._bg, 'pos', v) if hasattr(c, '_bg') else None,
+                       size=lambda c, v: setattr(c._bg, 'size', v) if hasattr(c, '_bg') else None)
+        if os.path.exists(boss_img_path):
+            img = KivyImage(source=boss_img_path, size_hint_y=0.55,
+                            allow_stretch=True, keep_ratio=True, fit_mode='contain')
+            boss_cell.add_widget(img)
+        boss_cell.add_widget(Label(text=boss.name[:8], font_size=dp(8), bold=True,
+                                    color=(1, 0.3, 0.3, 1), size_hint_y=0.15))
+        boss_cell._hp_lbl = Label(text=f'HP{boss.current_health}/{boss.max_health}',
+                                   font_size=dp(7), color=(1, 1, 1, 1), size_hint_y=0.12)
+        boss_cell.add_widget(boss_cell._hp_lbl)
+        boss_cell.add_widget(Label(text=f'ATK{boss.attack} DEF{boss.defense}',
+                                    font_size=dp(7), color=(0.8, 0.8, 0.8, 1), size_hint_y=0.13))
+        boss_cell._boss = boss
+        wrap.add_widget(boss_cell)
+        self._unit_cells[boss.id] = boss_cell
+
+        def _do_place(*a):
+            if wrap.width <= 0 or wrap.height <= 0:
+                return
+            ew = (wrap.width - spacing * (gs - 1)) / gs
+            eh = (wrap.height - spacing * (gs - 1)) / gs
+            boss_cell.pos = (c * (ew + spacing), wrap.height - (r + h) * (eh + spacing) + spacing)
+            boss_cell.size = (w * ew + (w - 1) * spacing, h * eh + (h - 1) * spacing)
+
+        wrap.bind(size=lambda *a: _do_place(*a))
+        _do_place()
+
     def _make_cell(self, unit, is_player):
         from kivy.graphics import Color as GfxColor, Rectangle
-        cell = BoxLayout(orientation='vertical', spacing=dp(0), padding=dp(2))
+        import os
+        cell = BoxLayout(orientation='vertical', spacing=dp(0), padding=dp(1))
         cell.size_hint = (1, None)
         gs = self._battle_system.enemy_grid_size if not is_player else 3
         cell_h = dp(58) if gs >= 4 else dp(72)
@@ -345,6 +403,16 @@ class BattleScreen(Screen):
             hp_c = (1, 0.8, 0.2, 1)
         else:
             hp_c = (1, 0.2, 0.2, 1)
+
+        if not is_player:
+            tkey = getattr(unit, 'template_key', '')
+            if tkey:
+                img_path = os.path.join('assets', 'enemies', f'{tkey}_0.png')
+                if os.path.exists(img_path):
+                    from kivy.uix.image import Image as KivyImage
+                    img = KivyImage(source=img_path, size_hint_y=0.45, allow_stretch=True,
+                                    keep_ratio=True, fit_mode='contain')
+                    cell.add_widget(img)
 
         row1 = BoxLayout(orientation='horizontal', size_hint_y=0.17, spacing=dp(2))
         row1.add_widget(Label(text=unit.name[:5], color=nc, font_size=name_s, bold=True,
