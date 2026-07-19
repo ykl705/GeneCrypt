@@ -740,3 +740,59 @@ SKILL_GENES = [name for name, data in GENE_TEMPLATES.items() if data.get('catego
 # 可计算性状的基因列表
 # ==========================================
 TRAIT_GENES = [name for name, data in GENE_TEMPLATES.items() if data.get('affects_trait')]
+
+# ==========================================
+# 血脉系统配置
+# ==========================================
+BLOODLINES = {
+    'dragon':  {'name': '龙裔', 'atk': 5, 'hp': 3, 'def': 0, 'spd': 0, 'icon': 'D'},
+    'phoenix': {'name': '鳳凰', 'atk': 0, 'hp': 5, 'def': 5, 'spd': 0, 'icon': 'P'},
+    'shadow':  {'name': '影暗', 'atk': 2, 'hp': 0, 'def': 0, 'spd': 8, 'icon': 'S'},
+    'frost':   {'name': '冰霜', 'atk': 0, 'hp': 2, 'def': 3, 'spd': 5, 'icon': 'F'},
+    'storm':   {'name': '雷鸣', 'atk': 4, 'hp': 0, 'def': 0, 'spd': 4, 'icon': 'T'},
+    'vital':   {'name': '生命', 'atk': 0, 'hp': 8, 'def': 2, 'spd': 0, 'icon': 'V'},
+}
+
+FUSION_TABLE = {
+    ('dragon', 'phoenix'): 'storm',
+    ('phoenix', 'dragon'): 'storm',
+    ('shadow', 'frost'): 'vital',
+    ('frost', 'shadow'): 'vital',
+    ('storm', 'vital'): 'dragon',
+    ('vital', 'storm'): 'dragon',
+}
+
+# ==========================================
+# 技能芯片配置
+# ==========================================
+CHIP_POOLS = {
+    'freeze_chip':     {'name': '冻结芯片',   'skill': '冻结',    'rarity': 1},
+    'shield_chip':     {'name': '护盾芯片',   'skill': '冰霜护盾', 'rarity': 1},
+    'heal_chip':       {'name': '治疗芯片',   'skill': '自我修复', 'rarity': 1},
+    'growth_chip':     {'name': '成长芯片',   'skill': '快速生长', 'rarity': 2},
+    'curse_chip':      {'name': '诅咒芯片',   'skill': '诅咒',    'rarity': 2},
+    'poison_nova_chip':{'name': '剧毒芯片',   'skill': '剧毒新星', 'rarity': 3},
+    'freeze_domain_chip':{'name':'永冻芯片',  'skill': '永冻领域', 'rarity': 3},
+    'absolute_chip':   {'name': '绝对零度芯片','skill':'绝对零度', 'rarity': 4},
+}
+
+# ==========================================
+# 模组配置
+# ==========================================
+MODULE_POOLS = {
+    'atk_mod_1':  {'name':'攻击芯片L1',  'stat':'attack',  'pct':8,  'level':1},
+    'hp_mod_1':   {'name':'生命核心L1',  'stat':'health',  'pct':10, 'level':1},
+    'def_mod_1':  {'name':'防御护甲L1',  'stat':'defense', 'pct':8,  'level':1},
+    'spd_mod_1':  {'name':'速度引擎L1',  'stat':'speed',   'pct':6,  'level':1},
+    'atk_mod_2':  {'name':'攻击芯片L2',  'stat':'attack',  'pct':16, 'level':2},
+    'hp_mod_2':   {'name':'生命核心L2',  'stat':'health',  'pct':20, 'level':2},
+    'def_mod_2':  {'name':'防御护甲L2',  'stat':'defense', 'pct':16, 'level':2},
+    'spd_mod_2':  {'name':'速度引擎L2',  'stat':'speed',   'pct':12, 'level':2},
+    'atk_mod_3':  {'name':'攻击芯片L3',  'stat':'attack',  'pct':25, 'level':3},
+    'hp_mod_3':   {'name':'生命核心L3',  'stat':'health',  'pct':30, 'level':3},
+}
+
+MODULE_MERGE = {
+    1: 2,  # 2个L1→1个L2
+    2: 3,  # 2个L2→1个L3
+}

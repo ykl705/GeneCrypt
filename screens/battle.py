@@ -610,8 +610,10 @@ class BattleScreen(Screen):
         stage_num = self._selected_stage
         gacha_reward = 5 + stage_num // 2
         mat_reward = 2 * (5 + stage_num // 2)
+        essence_reward = 1 + stage_num // 10
         app.game.gacha_currency += gacha_reward
         app.game.battle_materials += mat_reward
+        app.game.gene_essence += essence_reward
         next_stage = stage_num + 1
         from battle_config import STAGES
         if next_stage in STAGES and next_stage not in app.game.unlocked_stages:
@@ -631,7 +633,7 @@ class BattleScreen(Screen):
         app.game.save_game()
         app.refresh_breeding_combos()
         self._reward_box.clear_widgets()
-        reward_text = f'奖励: +{gacha_reward} +{mat_reward}'
+        reward_text = f'奖励: +{gacha_reward} +{mat_reward} +{essence_reward}精华'
         self._reward_box.add_widget(Label(text=reward_text, color=(1, 1, 0.6, 1)))
 
     def add_log(self, msg):

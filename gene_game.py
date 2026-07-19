@@ -149,6 +149,12 @@ class Card:
         if '条件反射' in self.passive_skills and self.skills:
             self.reflex_bound_skill = random.choice(self.skills)
         self.sprite_genome = self._random_genome()
+        self.bloodline = None
+        self.star = 1
+        self.training = {}
+        self.modules = []
+        self.chips = []
+        self.chip_slots = 1
     
     @staticmethod
     def _random_genome():
@@ -511,6 +517,29 @@ class Card:
                         if t in traits:
                             traits[t] = int(traits[t] * (1 + vigor_factor))
         
+        if getattr(self, 'bloodline', None):
+            from gene_config import BLOODLINES
+            bd = BLOODLINES.get(self.bloodline, {})
+            for stat_key in ('attack', 'health', 'defense', 'speed'):
+                pct = bd.get(stat_key[:3], 0) / 100.0
+                if pct > 0 and stat_key in traits:
+                    traits[stat_key] = int(traits[stat_key] * (1 + pct))
+        
+        star = getattr(self, 'star', 1)
+        if star > 1:
+            star_mult = 1 + 0.10 * (star - 1)
+            for t in list(traits.keys()):
+                traits[t] = int(traits[t] * star_mult)
+        
+        if getattr(self, 'modules', None):
+            from gene_config import MODULE_POOLS
+            for mid in self.modules:
+                md = MODULE_POOLS.get(mid, {})
+                stat = md.get('stat', '')
+                pct = md.get('pct', 0) / 100.0
+                if stat and pct > 0 and stat in traits:
+                    traits[stat] = int(traits[stat] * (1 + pct))
+        
         return traits
     
     def _apply_genome_enhancements(self, trait_name, base_value):
@@ -664,6 +693,12 @@ class Card:
             'reflex_bound_skill': getattr(self, 'reflex_bound_skill', None),
             '_rarity': getattr(self, '_rarity', None),
             'sprite_genome': getattr(self, 'sprite_genome', None),
+            'bloodline': getattr(self, 'bloodline', None),
+            'star': getattr(self, 'star', 1),
+            'training': getattr(self, 'training', {}),
+            'modules': getattr(self, 'modules', []),
+            'chips': getattr(self, 'chips', []),
+            'chip_slots': getattr(self, 'chip_slots', 1),
         }
     
     @staticmethod
@@ -703,6 +738,16 @@ class Card:
         card.passive_skills = data.get('passive_skills', {})
         card.reflex_bound_skill = data.get('reflex_bound_skill', None)
         card._rarity = data.get('_rarity', None)
+        card.bloodline = data.get('bloodline', None)
+        card.star = data.get('star', 1)
+        card.training = data.get('training', {})
+        card.modules = data.get('modules', [])
+        card.chips = data.get('chips', [])
+        card.chip_slots = data.get('chip_slots', 1)
+        for chip_info in card.chips:
+            skill = chip_info.get('skill_name', '')
+            if skill and skill not in card.skills:
+                card.skills.append(skill)
         isolated = data.get('isolated_genes', [])
         card.isolated_genes = set(isolated) if isolated else set()
         sg = data.get('sprite_genome', None)
@@ -759,6 +804,9 @@ class Game:
         self.quest_claimed = set()
         self.enemy_kills = {}
         self.breed_counter = 0
+        self.gene_essence = 0
+        self.chip_inventory = {}
+        self.module_inventory = {}
         
         if load_save and self.load_game():
             pass
@@ -1002,6 +1050,23 @@ class Game:
 
         self.breed_counter += 1
         return child_chromosomes, child_gender
+
+    def inherit_bloodline(self, parent1, parent2):
+        from gene_config import BLOODLINES, FUSION_TABLE
+        r = random.random()
+        b1 = getattr(parent1, 'bloodline', None)
+        b2 = getattr(parent2, 'bloodline', None)
+        if r < 0.25 and b1:
+            return b1
+        if r < 0.50 and b2:
+            return b2
+        if r < 0.60 and b1 and b2 and b1 != b2:
+            fused = FUSION_TABLE.get((b1, b2))
+            if fused:
+                return fused
+        if r < 0.70:
+            return random.choice(list(BLOODLINES.keys()))
+        return None
     
     def mutate_sequence(self, seq, severity='light'):
         seq_list = list(seq)
@@ -1347,6 +1412,122 @@ class Game:
             card.isolated_genes.add(gene_name)
             return True, f"{gene_name} 已加入隔离保护"
     
+    def star_up_card(self, card):
+        if not card.is_alive:
+            return False, "卡牌已死亡"
+        if card.star >= 5:
+            return False, "已达到最大星级"
+        cost_essence = card.star * 10
+        cost_mats = card.star * 20
+        if self.gene_essence < cost_essence:
+            return False, f"基因精华不足 (需要{cost_essence}，当前{self.gene_essence})"
+        if self.battle_materials < cost_mats:
+            return False, f"战斗材料不足 (需要{cost_mats}，当前{self.battle_materials})"
+        dup = next((c for c in self.cards if c.id != card.id and c.name == card.name and c.is_alive), None)
+        if dup is None:
+            return False, "需要一张同名卡牌作为材料"
+        self.cards.remove(dup)
+        self.gene_essence -= cost_essence
+        self.battle_materials -= cost_mats
+        card.star += 1
+        if card.star >= 3:
+            card.chip_slots = 2
+        if card.star >= 5:
+            card.chip_slots = 3
+        card.traits = card.calculate_traits()
+        return True, f"升星成功! 当前{card.star}星"
+
+    def train_card(self, card, stat_key):
+        if not card.is_alive:
+            return False, "卡牌已死亡"
+        max_sessions = card.star * 8
+        done = card.training.get(stat_key, 0)
+        if done >= max_sessions:
+            return False, f"{stat_key}训练已达上限({max_sessions}次)"
+        cost = 20 + done * 5
+        if self.battle_materials < cost:
+            return False, f"战斗材料不足(需要{cost}，当前{self.battle_materials})"
+        self.battle_materials -= cost
+        card.training[stat_key] = done + 1
+        import random
+        if stat_key == 'health':
+            boost = random.randint(3, 8)
+        elif stat_key == 'attack':
+            boost = random.randint(1, 3)
+        elif stat_key == 'defense':
+            boost = random.randint(1, 2)
+        else:
+            boost = random.randint(1, 2)
+        card.traits[stat_key] = card.traits.get(stat_key, 10) + boost
+        return True, f"训练成功! {stat_key}+{boost} ({card.training[stat_key]}/{max_sessions})"
+
+    def equip_chip(self, card, chip_id):
+        if not card.is_alive:
+            return False, "卡牌已死亡"
+        if len(card.chips) >= card.chip_slots:
+            return False, f"芯片槽已满({card.chip_slots}个)"
+        if self.chip_inventory.get(chip_id, 0) <= 0:
+            return False, "芯片库存不足"
+        from gene_config import CHIP_POOLS
+        cp = CHIP_POOLS.get(chip_id, {})
+        if not cp:
+            return False, "芯片数据不存在"
+        self.chip_inventory[chip_id] -= 1
+        skill = cp['skill']
+        card.chips.append({'chip_id': chip_id, 'skill_name': skill})
+        if skill not in card.skills:
+            card.skills.append(skill)
+        return True, f"装备芯片: {cp['name']}"
+
+    def remove_chip(self, card, chip_index):
+        if not card.is_alive or chip_index >= len(card.chips):
+            return False, "无效操作"
+        removed = card.chips.pop(chip_index)
+        card.skills = [s for s in card.skills if s != removed['skill_name']]
+        return True, "芯片已移除"
+
+    def equip_module(self, card, module_id):
+        if not card.is_alive:
+            return False, "卡牌已死亡"
+        max_slots = 1 if card.star < 3 else (2 if card.star < 5 else 3)
+        if len(card.modules) >= max_slots:
+            return False, f"模组槽已满({max_slots}个)"
+        if self.module_inventory.get(module_id, 0) <= 0:
+            return False, "模组库存不足"
+        self.module_inventory[module_id] -= 1
+        card.modules.append(module_id)
+        card.traits = card.calculate_traits()
+        return True, "模组装备成功"
+
+    def remove_module(self, card, module_id):
+        if module_id in card.modules:
+            card.modules.remove(module_id)
+            card.traits = card.calculate_traits()
+            return True, "模组已卸下"
+        return False, "该模组未装备"
+
+    def merge_modules(self, module_id):
+        from gene_config import MODULE_POOLS, MODULE_MERGE
+        md = MODULE_POOLS.get(module_id, {})
+        lv = md.get('level', 0)
+        next_lv = MODULE_MERGE.get(lv, 0)
+        if next_lv == 0:
+            return False, "该模组已达最高等级"
+        next_id = module_id.replace(f'_{lv}', f'_{next_lv}')
+        if self.module_inventory.get(module_id, 0) >= 2:
+            self.module_inventory[module_id] -= 2
+            self.module_inventory[next_id] = self.module_inventory.get(next_id, 0) + 1
+            return True, f"合成成功! {MODULE_POOLS[next_id]['name']}"
+        return False, "需要2个同等级模组合成"
+
+    def _get_chip_slots(self, card):
+        star = getattr(card, 'star', 1)
+        if star >= 5:
+            return 3
+        elif star >= 3:
+            return 2
+        return 1
+    
     def add_breeding_task(self, card1, card2, callback):
         base_duration = BREEDING_CONFIG['base_duration']
         duration = base_duration / self.breed_speed_multiplier
@@ -1626,6 +1807,16 @@ class Game:
                 card._rarity = 'normal'
             
             results.append(card)
+            
+            roll_bonus = random.random()
+            if roll_bonus < 0.08:
+                from gene_config import CHIP_POOLS
+                chip_id = random.choice(list(CHIP_POOLS.keys()))
+                self.chip_inventory[chip_id] = self.chip_inventory.get(chip_id, 0) + 1
+            elif roll_bonus < 0.16:
+                from gene_config import MODULE_POOLS
+                mod_id = random.choice([k for k, v in MODULE_POOLS.items() if v['level'] == 1])
+                self.module_inventory[mod_id] = self.module_inventory.get(mod_id, 0) + 1
         
         return results, f"抽卡成功，获得{len(results)}张卡牌"
     
@@ -1802,6 +1993,9 @@ class Game:
                 'enemy_kills': self.enemy_kills,
                 'breed_counter': self.breed_counter,
                 'save_version': self.SAVE_VERSION,
+                'gene_essence': self.gene_essence,
+                'chip_inventory': self.chip_inventory,
+                'module_inventory': self.module_inventory,
             }
             tmp = self.SAVE_FILE + '.tmp'
             with open(tmp, 'w', encoding='utf-8') as f:
@@ -1851,6 +2045,9 @@ class Game:
             self.quest_claimed = set(save_data.get('quest_claimed', []))
             self.enemy_kills = save_data.get('enemy_kills', {})
             self.breed_counter = save_data.get('breed_counter', 0)
+            self.gene_essence = save_data.get('gene_essence', 0)
+            self.chip_inventory = save_data.get('chip_inventory', {})
+            self.module_inventory = save_data.get('module_inventory', {})
             Card.card_count = save_data.get('card_count', len(self.cards))
             
             old_ver = save_data.get('save_version', 0)

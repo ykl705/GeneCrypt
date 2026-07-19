@@ -93,6 +93,10 @@ class CardLibraryScreen(Screen):
         if c.is_alive:
             mutate_btn = Button(text='射线变异', on_press=lambda _: self._mutate_card(c))
             self._action_bar.add_widget(mutate_btn)
+            star_btn = Button(text=f'升星({c.star}/5)', on_press=lambda _: self._star_up(c))
+            self._action_bar.add_widget(star_btn)
+            train_btn = Button(text='训练', on_press=lambda _: self._train_card(c))
+            self._action_bar.add_widget(train_btn)
         clone_btn = Button(text='克隆', on_press=lambda _: self._clone_card(c))
         self._action_bar.add_widget(clone_btn)
         report_btn = Button(text='基因报告', on_press=lambda _: self._show_report(c))
@@ -100,6 +104,54 @@ class CardLibraryScreen(Screen):
         delete_btn = Button(text='删除', on_press=lambda _: self._delete_card(c))
         delete_btn.background_color = (0.8, 0.2, 0.2, 1)
         self._action_bar.add_widget(delete_btn)
+        if c.is_alive:
+            mod_btn = Button(text='模组', on_press=lambda _: self._manage_modules(c))
+            self._action_bar.add_widget(mod_btn)
+            chip_btn = Button(text='芯片', on_press=lambda _: self._manage_chips(c))
+            self._action_bar.add_widget(chip_btn)
+
+    def _star_up(self, card):
+        app = App.get_running_app()
+        success, msg = app.game.star_up_card(card)
+        popup = Popup(title='升星', content=Label(text=msg), size_hint=(0.5, 0.3))
+        btn = Button(text='确定', on_press=popup.dismiss, size_hint_y=None, height=dp(40))
+        content = BoxLayout(orientation='vertical', padding=dp(10))
+        content.add_widget(Label(text=msg))
+        content.add_widget(btn)
+        popup.content = content
+        popup.open()
+        app.game.save_game()
+        app.refresh_breeding_combos()
+        self._show_detail(card)
+
+    def _train_card(self, card):
+        from kivy.uix.gridlayout import GridLayout
+        app = App.get_running_app()
+        content = BoxLayout(orientation='vertical', spacing=dp(5), padding=dp(10))
+        content.add_widget(Label(text=f'训练 {card.name} | 精华:{app.game.gene_essence} 材料:{app.game.battle_materials}',
+                                  size_hint_y=None, height=dp(24), color=(0.8, 0.8, 0.8, 1)))
+        stats = GridLayout(cols=2, size_hint_y=None, height=dp(160), spacing=dp(3))
+        for stat_key in ('attack', 'health', 'defense', 'speed'):
+            done = card.training.get(stat_key, 0)
+            max_s = card.star * 8
+            stats.add_widget(Label(text=f'{stat_key}: {done}/{max_s}', color=(1, 1, 1, 1)))
+            btn = Button(text=f'训练', size_hint_y=None, height=dp(32),
+                         on_press=lambda _, sk=stat_key: self._do_train(card, sk))
+            stats.add_widget(btn)
+        content.add_widget(stats)
+        close_btn = Button(text='关闭', size_hint_y=None, height=dp(36))
+        content.add_widget(close_btn)
+        popup = Popup(title='训练', content=content, size_hint=(0.6, 0.5))
+        close_btn.bind(on_press=popup.dismiss)
+        popup.open()
+
+    def _do_train(self, card, stat_key):
+        app = App.get_running_app()
+        success, msg = app.game.train_card(card, stat_key)
+        from kivy.uix.popup import Popup
+        popup = Popup(title='训练结果', content=Label(text=msg), size_hint=(0.5, 0.25))
+        popup.open()
+        app.game.save_game()
 
     def _delete_card(self, card):
         app = App.get_running_app()
@@ -175,3 +227,84 @@ class CardLibraryScreen(Screen):
         popup.content = sv
         close_btn.bind(on_press=popup.dismiss)
         popup.open()
+
+    def _manage_modules(self, card):
+        app = App.get_running_app()
+        game = app.game
+        from gene_config import MODULE_POOLS
+        content = BoxLayout(orientation='vertical', spacing=dp(4), padding=dp(8))
+        slots = 1 if card.star < 3 else (2 if card.star < 5 else 3)
+        content.add_widget(Label(text=f'{card.name} 模组 ({len(card.modules)}/{slots})',
+                                  size_hint_y=None, height=dp(24), color=(0.8, 0.8, 0.8, 1)))
+        for mid, count in game.module_inventory.items():
+            if count <= 0: continue
+            md = MODULE_POOLS.get(mid, {})
+            if not md: continue
+            row = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(32), spacing=dp(4))
+            row.add_widget(Label(text=f'{md["name"]} x{count}', size_hint_x=0.5, color=(1,1,1,1)))
+            row.add_widget(Button(text='装备', size_hint_x=0.25,
+                                  on_press=lambda _, m=mid: self._do_mod_eq(card, m)))
+            if md['level'] < 3:
+                row.add_widget(Button(text='合成', size_hint_x=0.25,
+                                      on_press=lambda _, m=mid: self._do_mod_merge(m)))
+            content.add_widget(row)
+        for mid in list(card.modules):
+            md = MODULE_POOLS.get(mid, {})
+            if md:
+                content.add_widget(Button(text=f'卸下 {md["name"]}',
+                                          on_press=lambda _, m=mid: self._do_mod_rm(card, m)))
+        close_btn = Button(text='关闭', size_hint_y=None, height=dp(36))
+        content.add_widget(close_btn)
+        popup = Popup(title='模组管理', content=content, size_hint=(0.7, 0.7))
+        close_btn.bind(on_press=popup.dismiss)
+        popup.open()
+
+    def _do_mod_eq(self, card, mid):
+        App.get_running_app().game.equip_module(card, mid)
+        App.get_running_app().game.save_game()
+        self._show_detail(card)
+
+    def _do_mod_rm(self, card, mid):
+        App.get_running_app().game.remove_module(card, mid)
+        App.get_running_app().game.save_game()
+        self._show_detail(card)
+
+    def _do_mod_merge(self, mid):
+        App.get_running_app().game.merge_modules(mid)
+        App.get_running_app().game.save_game()
+
+    def _manage_chips(self, card):
+        app = App.get_running_app()
+        game = app.game
+        from gene_config import CHIP_POOLS
+        content = BoxLayout(orientation='vertical', spacing=dp(4), padding=dp(8))
+        content.add_widget(Label(text=f'{card.name} 芯片 ({len(card.chips)}/{card.chip_slots})',
+                                  size_hint_y=None, height=dp(24), color=(0.8,0.8,0.8,1)))
+        for cid, count in game.chip_inventory.items():
+            if count <= 0: continue
+            cp = CHIP_POOLS.get(cid, {})
+            if not cp: continue
+            row = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(32), spacing=dp(4))
+            row.add_widget(Label(text=f'{cp["name"]}({cp["skill"]}) x{count}',
+                                 size_hint_x=0.7, color=(0.6,1,0.6,1)))
+            row.add_widget(Button(text='装备', size_hint_x=0.3,
+                                  on_press=lambda _, c=cid: self._do_chip_eq(card, c)))
+            content.add_widget(row)
+        for i, ci in enumerate(list(card.chips)):
+            content.add_widget(Button(text=f'移除 {ci.get("skill_name","?")}',
+                                      on_press=lambda _, idx=i: self._do_chip_rm(card, idx)))
+        close_btn = Button(text='关闭', size_hint_y=None, height=dp(36))
+        content.add_widget(close_btn)
+        popup = Popup(title='芯片管理', content=content, size_hint=(0.7, 0.6))
+        close_btn.bind(on_press=popup.dismiss)
+        popup.open()
+
+    def _do_chip_eq(self, card, cid):
+        App.get_running_app().game.equip_chip(card, cid)
+        App.get_running_app().game.save_game()
+        self._show_detail(card)
+
+    def _do_chip_rm(self, card, idx):
+        App.get_running_app().game.remove_chip(card, idx)
+        App.get_running_app().game.save_game()
+        self._show_detail(card)

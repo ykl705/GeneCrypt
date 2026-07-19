@@ -39,14 +39,23 @@ class CardWidget(ButtonBehavior, BoxLayout):
         alive_str = '' if c.is_alive else ' [已死亡]'
 
         name_lbl = Label(text=f'{c.name} [{c.id}]{alive_str}',
-                         size_hint_y=0.4, color=(1, 1, 1, 1), halign='left', valign='middle',
+                         size_hint_y=0.35, color=(1, 1, 1, 1), halign='left', valign='middle',
                          text_size=(self.width - dp(10), None), shorten=True)
         traits = c.traits
-        info = f'HP:{traits.get("health","?")} ATK:{traits.get("attack","?")} DEF:{traits.get("defense","?")} SPD:{traits.get("speed","?")}'
-        info_lbl = Label(text=info, size_hint_y=0.3, color=(0.8, 0.8, 0.8, 1),
+        star_str = '★' * getattr(c, 'star', 1)
+        bl = getattr(c, 'bloodline', '')
+        bl_str = f'[{bl}]' if bl else ''
+        info = f'{star_str}{bl_str} HP:{traits.get("health","?")} ATK:{traits.get("attack","?")}'
+        info_lbl = Label(text=info, size_hint_y=0.25, color=(0.8, 0.8, 0.8, 1),
                          halign='left', text_size=(self.width - dp(10), None))
-        skills_lbl = Label(text=f'技能: {", ".join(c.skills[:3])}' if c.skills else '无技能',
-                           size_hint_y=0.3, color=(0.6, 1, 0.6, 1), halign='left',
+        extra = []
+        if getattr(c, 'modules', []):
+            extra.append(f'M:{len(c.modules)}')
+        if getattr(c, 'chips', []):
+            extra.append(f'C:{len(c.chips)}')
+        extra_str = ' '.join(extra)
+        skills_lbl = Label(text=f'{extra_str} 技能: {", ".join(c.skills[:3])}' if c.skills else f'{extra_str} 无技能',
+                           size_hint_y=0.25, color=(0.6, 1, 0.6, 1), halign='left',
                            text_size=(self.width - dp(10), None))
         self.add_widget(name_lbl)
         self.add_widget(info_lbl)

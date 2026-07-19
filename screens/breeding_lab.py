@@ -139,6 +139,7 @@ class BreedingLabScreen(Screen):
                 name = f'{male.name[:2]}{female.name[:2]}子代{len(app.game.cards)+1}'
                 card = app.game.create_card(name, child_gender, chromosomes=child_chr)
                 if card:
+                    card.bloodline = app.game.inherit_bloodline(male, female)
                     app.game._check_all_quests()
                     app.game.save_game()
             self._refresh()
