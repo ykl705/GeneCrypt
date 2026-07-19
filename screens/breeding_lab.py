@@ -63,6 +63,11 @@ class BreedingLabScreen(Screen):
 
     def on_enter(self):
         self._refresh()
+        self._timer = Clock.schedule_interval(lambda dt: self._refresh(), 0.5)
+
+    def on_pre_leave(self):
+        if hasattr(self, '_timer') and self._timer:
+            Clock.unschedule(self._timer)
 
     def update_combos(self):
         pass

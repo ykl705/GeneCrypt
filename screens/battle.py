@@ -61,7 +61,8 @@ class BattleScreen(Screen):
         self._pending_card = None
 
     def on_enter(self):
-        pass
+        if self._battle_running and self._battle_system:
+            self._update_all_cells()
 
     def _show_stage_select(self):
         app = App.get_running_app()
@@ -175,15 +176,26 @@ class BattleScreen(Screen):
         if pos < 0:
             return
         if self._pending_card:
+            if len(self._team) >= 5:
+                popup = Popup(title='错误', content=Label(text='最多上阵5张卡牌'),
+                              size_hint=(0.5, 0.25))
+                popup.open()
+                return
+            existing_ids = [c.id for c in self._team.values()]
+            if self._pending_card.id in existing_ids:
+                popup = Popup(title='错误', content=Label(text='该卡牌已上阵'),
+                              size_hint=(0.5, 0.25))
+                popup.open()
+                return
             self._team[pos] = self._pending_card
             self._pending_card = None
             self._pending_lbl.text = ''
             self._refresh_grid_btns()
-            self._team_btn.text = f'队伍: {len(self._team)}/3'
+            self._team_btn.text = f'队伍: {len(self._team)}/5'
         elif pos in self._team:
             del self._team[pos]
             self._refresh_grid_btns()
-            self._team_btn.text = f'队伍: {len(self._team)}/3'
+            self._team_btn.text = f'队伍: {len(self._team)}/5'
 
     def _refresh_grid_btns(self):
         for pos, btn in self._grid_btns.items():
@@ -550,3 +562,6 @@ class BattleScreen(Screen):
     def add_log(self, msg):
         self._log.add_widget(Label(text=str(msg), size_hint_y=None, height=dp(20),
                                     font_size=dp(11), color=(0.8, 0.8, 0.8, 1)))
+        sv = self._log.parent
+        if sv and hasattr(sv, 'scroll_y'):
+            sv.scroll_y = 0

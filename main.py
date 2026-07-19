@@ -197,10 +197,23 @@ class GeneCryptApp(App):
             pass
     
     def refresh_breeding_combos(self):
-        """供屏幕调用的刷新方法"""
         for name, screen in self._screen_refs.items():
             if hasattr(screen, 'on_enter'):
                 screen.on_enter()
+        if self.game:
+            newly = self.game._check_all_quests()
+            for q in newly:
+                from kivy.uix.popup import Popup
+                from kivy.uix.boxlayout import BoxLayout
+                from kivy.uix.label import Label
+                from kivy.uix.button import Button
+                content = BoxLayout(orientation='vertical', padding=dp(20))
+                content.add_widget(Label(text=f'任务完成!\n{q["title"]}', halign='center'))
+                btn = Button(text='确定', size_hint_y=None, height=dp(40))
+                content.add_widget(btn)
+                popup = Popup(title='任务完成', content=content, size_hint=(0.5, 0.3))
+                btn.bind(on_press=popup.dismiss)
+                popup.open()
     
     def on_pause(self):
         try:
