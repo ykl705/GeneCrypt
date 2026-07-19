@@ -96,12 +96,13 @@ class TechTreeScreen(Screen):
 
     def _upgrade(self, tech_name):
         app = App.get_running_app()
-        result = app.game.upgrade_tech(tech_name)
-        if result.get('success'):
+        success, msg = app.game.upgrade_tech(tech_name)
+        if success:
             app.game.save_game()
+            app.game._check_all_quests()
             self._refresh()
         else:
             from kivy.uix.popup import Popup
-            popup = Popup(title='升级失败', content=Label(text=result.get('msg', '未知错误')),
+            popup = Popup(title='升级失败', content=Label(text=msg or '未知错误'),
                           size_hint=(0.5, 0.3))
             popup.open()

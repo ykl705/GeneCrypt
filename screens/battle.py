@@ -271,14 +271,16 @@ class BattleScreen(Screen):
         self._unit_cells = {}
         bs = self._battle_system
 
-        grid_container = BoxLayout(orientation='horizontal', spacing=dp(15))
-        gs = 3
+        player_gs = 3
+        enemy_gs = bs.enemy_grid_size
 
-        player_side = BoxLayout(orientation='vertical', size_hint_x=0.5, spacing=dp(2))
-        player_side.add_widget(Label(text='我方', color=(0.3, 0.8, 1, 1), size_hint_y=None, height=dp(22)))
-        pg = GridLayout(cols=gs, spacing=dp(2), size_hint_y=0.95)
+        grid_container = BoxLayout(orientation='horizontal', spacing=dp(12))
+
+        player_side = BoxLayout(orientation='vertical', size_hint_x=0.45, spacing=dp(2))
+        player_side.add_widget(Label(text='我方', color=(0.3, 0.8, 1, 1), size_hint_y=None, height=dp(20)))
+        pg = GridLayout(cols=player_gs, spacing=dp(2), size_hint_y=0.95)
         pmap = {u.position: u for u in bs.player_team}
-        for i in range(gs * gs):
+        for i in range(player_gs * player_gs):
             unit = pmap.get(i)
             cell = self._make_cell(unit, is_player=True)
             pg.add_widget(cell)
@@ -287,19 +289,20 @@ class BattleScreen(Screen):
         player_side.add_widget(pg)
         grid_container.add_widget(player_side)
 
-        enemy_side = BoxLayout(orientation='vertical', size_hint_x=0.5, spacing=dp(2))
-        enemy_side.add_widget(Label(text='敌方', color=(1, 0.3, 0.3, 1), size_hint_y=None, height=dp(22)))
-        eg = GridLayout(cols=gs, spacing=dp(2), size_hint_y=0.95)
+        enemy_side = BoxLayout(orientation='vertical', size_hint_x=0.55 if enemy_gs > 3 else 0.5, spacing=dp(2))
+        enemy_side.add_widget(Label(text='敌方', color=(1, 0.3, 0.3, 1), size_hint_y=None, height=dp(20)))
+        eg = GridLayout(cols=enemy_gs, spacing=dp(2) if enemy_gs <= 3 else dp(1), size_hint_y=0.95)
         emap = {}
         for u in bs.enemies:
             ops = u.occupied_positions if u.occupied_positions else [u.position]
             for op in ops:
                 emap[op] = u
-        for i in range(gs * gs):
+        for i in range(enemy_gs * enemy_gs):
             unit = emap.get(i)
-            cell = self._make_cell(unit, is_player=False)
+            is_primary = unit is not None and i == unit.position
+            cell = self._make_cell(unit if is_primary else None, is_player=False)
             eg.add_widget(cell)
-            if unit and i == unit.position:
+            if unit is not None and i == unit.position:
                 self._unit_cells[unit.id] = cell
         enemy_side.add_widget(eg)
         grid_container.add_widget(enemy_side)
@@ -310,7 +313,11 @@ class BattleScreen(Screen):
         from kivy.graphics import Color as GfxColor, Rectangle
         cell = BoxLayout(orientation='vertical', spacing=dp(0), padding=dp(2))
         cell.size_hint = (1, None)
-        cell.height = dp(72)
+        gs = self._battle_system.enemy_grid_size if not is_player else 3
+        cell_h = dp(58) if gs >= 4 else dp(72)
+        cell.height = cell_h
+        font_s = dp(6) if gs >= 4 else dp(7)
+        name_s = dp(7) if gs >= 4 else dp(8)
 
         with cell.canvas.before:
             if unit is None:
@@ -340,18 +347,18 @@ class BattleScreen(Screen):
             hp_c = (1, 0.2, 0.2, 1)
 
         row1 = BoxLayout(orientation='horizontal', size_hint_y=0.17, spacing=dp(2))
-        row1.add_widget(Label(text=unit.name[:5], color=nc, font_size=dp(8), bold=True,
+        row1.add_widget(Label(text=unit.name[:5], color=nc, font_size=name_s, bold=True,
                               size_hint_x=0.55, halign='left', valign='middle'))
         row1.add_widget(Label(text=f'SPD{unit.speed}', color=(0.7, 0.7, 0.7, 1),
-                              font_size=dp(7), size_hint_x=0.45, halign='right'))
+                              font_size=font_s, size_hint_x=0.45, halign='right'))
         cell.add_widget(row1)
 
         row2 = BoxLayout(orientation='horizontal', size_hint_y=0.14, spacing=dp(2))
         cell._hp_lbl = Label(text=f'HP{unit.current_health}/{unit.max_health}',
-                             font_size=dp(7), color=hp_c, size_hint_x=0.55, halign='left')
+                             font_size=font_s, color=hp_c, size_hint_x=0.55, halign='left')
         row2.add_widget(cell._hp_lbl)
         row2.add_widget(Label(text=f'ATK{unit.attack}', color=(1, 0.7, 0.3, 1),
-                              font_size=dp(7), size_hint_x=0.45, halign='right'))
+                              font_size=font_s, size_hint_x=0.45, halign='right'))
         cell.add_widget(row2)
 
         bar1 = BoxLayout(size_hint_y=0.06, spacing=dp(0))
@@ -367,10 +374,10 @@ class BattleScreen(Screen):
         row3 = BoxLayout(orientation='horizontal', size_hint_y=0.14, spacing=dp(2))
         d = unit.defense if hasattr(unit, 'defense') else 0
         row3.add_widget(Label(text=f'DEF{d}', color=(0.5, 0.7, 1, 1),
-                              font_size=dp(7), size_hint_x=0.55, halign='left'))
+                              font_size=font_s, size_hint_x=0.55, halign='left'))
         max_bar = BATTLE_CONFIG['action_bar_max']
         ab = min(unit.action_bar / max_bar, 1.0) if max_bar > 0 else 0
-        cell._atb_lbl = Label(text=f'ATB{ab*100:.0f}%', font_size=dp(7),
+        cell._atb_lbl = Label(text=f'ATB{ab*100:.0f}%', font_size=font_s,
                               color=(0.7, 0.7, 0, 1), size_hint_x=0.45, halign='right')
         row3.add_widget(cell._atb_lbl)
         cell.add_widget(row3)
@@ -391,7 +398,7 @@ class BattleScreen(Screen):
             if k in ('poison', 'burn', 'bleed', 'freeze', 'paralyze', 'sleep'):
                 statuses.append(k[:1].upper())
         st_text = ' '.join(statuses) if statuses else ''
-        cell.add_widget(Label(text=f'{skills_text}  {st_text}', font_size=dp(6),
+        cell.add_widget(Label(text=f'{skills_text}  {st_text}', font_size=dp(5) if gs >= 4 else dp(6),
                               color=(0.5, 0.5, 0.5, 1), size_hint_y=0.16))
 
         return cell

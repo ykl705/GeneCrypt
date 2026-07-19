@@ -1465,12 +1465,12 @@ def _pick_skills(template, stage):
 # Boss/elite stat multipliers
 # ============================================================
 BOSS_STAT_MULTIPLIERS = {
-    'boss': 1.5, 'overlord': 2.0, 'devourer': 1.8, 'void_overlord': 2.0,
-    'abyss_lord': 2.0, 'mech_god': 2.5, 'void_destroyer': 2.5,
-    'bone_dragon': 1.8, 'lab_boss': 1.6, 'ruins_boss': 1.7,
-    'rift_boss': 1.8, 'elem_boss': 1.8, 'abyss_boss': 2.0,
-    'void_dragon_god': 2.2, 'abyss_devourer': 2.0,
-    'sanctuary_archbishop': 2.0,
+    'boss': 1.3, 'overlord': 1.5, 'devourer': 1.4, 'void_overlord': 1.5,
+    'abyss_lord': 1.5, 'mech_god': 1.6, 'void_destroyer': 1.6,
+    'bone_dragon': 1.4, 'lab_boss': 1.3, 'ruins_boss': 1.4,
+    'rift_boss': 1.4, 'elem_boss': 1.4, 'abyss_boss': 1.5,
+    'void_dragon_god': 1.5, 'abyss_devourer': 1.5,
+    'sanctuary_archbishop': 1.5,
 }
 
 # ============================================================
@@ -1529,10 +1529,9 @@ def _generate_stages():
     stages = {}
 
     for stage_num in range(1, 101):
-        # Quadratic scaling: gentle early, steep late
         n = stage_num - 1
-        health_scale = 1 + n * 0.10 + n * n * 0.001
-        stat_scale = 1 + n * 0.08 + n * n * 0.0008
+        health_scale = 1 + n * 0.05 + n * n * 0.0003
+        stat_scale = 1 + n * 0.04 + n * n * 0.0002
 
         extra_count = 0
         if stage_num > 30:

@@ -97,6 +97,17 @@ class CardLibraryScreen(Screen):
         self._action_bar.add_widget(clone_btn)
         report_btn = Button(text='基因报告', on_press=lambda _: self._show_report(c))
         self._action_bar.add_widget(report_btn)
+        delete_btn = Button(text='删除', on_press=lambda _: self._delete_card(c))
+        delete_btn.background_color = (0.8, 0.2, 0.2, 1)
+        self._action_bar.add_widget(delete_btn)
+
+    def _delete_card(self, card):
+        app = App.get_running_app()
+        app.game.cards.remove(card)
+        app.game.save_game()
+        self._selected_card = None
+        app.refresh_breeding_combos()
+        self._refresh()
 
     def _mutate_card(self, card):
         from kivy.uix.textinput import TextInput
