@@ -93,29 +93,33 @@ class BattleScreen(Screen):
 
     def _show_team_select(self):
         app = App.get_running_app()
-        content = BoxLayout(orientation='vertical', spacing=dp(6), padding=dp(10))
-        content.add_widget(Label(text='点击下方卡牌选中，再点击上方格子放置',
-                                 size_hint_y=None, height=dp(28), color=(0.8, 0.8, 0.8, 1)))
-        self._pending_lbl = Label(text='', size_hint_y=None, height=dp(22), color=(0.4, 1, 0.4, 1))
+        content = BoxLayout(orientation='vertical', spacing=dp(4), padding=dp(6))
+        content.add_widget(Label(text='点击卡牌选中，再点击格子放置',
+                                 size_hint_y=None, height=dp(24), color=(0.8, 0.8, 0.8, 1)))
+        self._pending_lbl = Label(text='', size_hint_y=None, height=dp(20), color=(0.4, 1, 0.4, 1))
         content.add_widget(self._pending_lbl)
-        content.add_widget(Label(text='出战阵型 - 点击格子放置/移除',
-                                 size_hint_y=None, height=dp(22), color=(1, 1, 1, 1)))
 
+        two_col = BoxLayout(orientation='horizontal', size_hint_y=1, spacing=dp(8))
+
+        left = BoxLayout(orientation='vertical', size_hint_x=0.45, spacing=dp(2))
+        left.add_widget(Label(text='出战阵型', size_hint_y=None, height=dp(20), color=(1, 1, 1, 1)))
         self._grid_btns = {}
-        grid = GridLayout(cols=3, spacing=dp(4), size_hint_y=None, height=dp(210))
+        grid = GridLayout(cols=3, spacing=dp(3), size_hint_y=None, height=dp(165))
         for pos in range(9):
             card_at = self._team.get(pos)
-            txt = f'[{pos+1}] {card_at.name[:4]}' if card_at else f'[空{pos+1}]'
+            txt = f'{pos+1}:{card_at.name[:3]}' if card_at else f'{pos+1}:空'
             clr = (0.3, 0.8, 1, 1) if card_at else (0.4, 0.4, 0.4, 1)
-            btn = Button(text=txt, size_hint=(1, None), height=dp(60),
-                         background_color=clr, halign='center')
+            btn = Button(text=txt, size_hint=(1, None), height=dp(50),
+                         background_color=clr, halign='center', font_size=dp(10))
             btn._pos = pos
             btn.bind(on_press=self._on_grid_cell)
             grid.add_widget(btn)
             self._grid_btns[pos] = btn
-        content.add_widget(grid)
+        left.add_widget(grid)
+        two_col.add_widget(left)
 
-        content.add_widget(Label(text='可用卡牌', size_hint_y=None, height=dp(22), color=(1, 1, 1, 1)))
+        right = BoxLayout(orientation='vertical', size_hint_x=0.55, spacing=dp(2))
+        right.add_widget(Label(text='可用卡牌', size_hint_y=None, height=dp(20), color=(1, 1, 1, 1)))
         sv = ScrollView(size_hint_y=1, do_scroll_x=False, bar_width=dp(6),
                         scroll_type=['bars', 'content'])
         inner = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(2))
@@ -124,12 +128,12 @@ class BattleScreen(Screen):
             if not card.is_alive:
                 continue
             in_t = card.id in [c.id for c in self._team.values() if c]
-            prefix = '[已上阵] ' if in_t else ''
+            prefix = '[上阵]' if in_t else ''
             atk = card.traits.get('attack', 0)
             hp = card.traits.get('health', 0)
             lbl = Label(text=f'{prefix}{card.name} ATK:{atk} HP:{hp}',
-                         size_hint_y=None, height=dp(36), color=(1, 1, 1, 1),
-                         halign='left', valign='middle')
+                         size_hint_y=None, height=dp(30), color=(1, 1, 1, 1),
+                         halign='left', valign='middle', font_size=dp(11))
             lbl._card = card
             if in_t:
                 lbl.color = (0.3, 0.8, 1, 1)
@@ -142,16 +146,19 @@ class BattleScreen(Screen):
             inner.add_widget(lbl)
         inner.bind(on_touch_down=self._card_list_touch)
         sv.add_widget(inner)
-        content.add_widget(sv)
+        right.add_widget(sv)
+        two_col.add_widget(right)
 
-        btn_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(44), spacing=dp(10))
+        content.add_widget(two_col)
+
+        btn_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(40), spacing=dp(10))
         confirm = Button(text='确认编队')
         clear = Button(text='清空全部')
         btn_row.add_widget(confirm)
         btn_row.add_widget(clear)
         content.add_widget(btn_row)
 
-        popup = Popup(title='选择队伍', content=content, size_hint=(0.8, 0.85))
+        popup = Popup(title='选择队伍', content=content, size_hint=(0.9, 0.85))
         confirm.bind(on_press=lambda _: popup.dismiss())
         clear.bind(on_press=lambda _: self._do_clear_team())
         popup.open()
