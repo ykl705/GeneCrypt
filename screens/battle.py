@@ -164,8 +164,11 @@ class BattleScreen(Screen):
         popup.open()
 
     def _card_list_touch(self, instance, touch):
+        x, y = instance.to_widget(*touch.pos)
         for child in instance.children:
-            if child.collide_point(*child.to_widget(*touch.pos)):
+            cx, cy = child.pos
+            cw, ch = child.size
+            if cx <= x <= cx + cw and cy <= y <= cy + ch:
                 card = getattr(child, '_card', None)
                 if card:
                     self._pending_card = card
@@ -539,6 +542,16 @@ class BattleScreen(Screen):
         if next_stage in STAGES and next_stage not in app.game.unlocked_stages:
             app.game.unlocked_stages.append(next_stage)
             app.game.max_stage = max(app.game.max_stage, next_stage)
+        alive_players = [u for u in self._battle_system.player_team if u.is_alive]
+        if len(alive_players) == len(self._battle_system.player_team):
+            app.game.no_loss_stages.add(stage_num)
+        for u in self._battle_system.enemies:
+            etype = getattr(u, '_etype', u.name)
+            app.game.enemy_kills[etype] = app.game.enemy_kills.get(etype, 0) + 1
+            width = getattr(u, 'width', 1)
+            height = getattr(u, 'height', 1)
+            if width > 1 or height > 1:
+                app.game.enemy_kills['__boss__'] = app.game.enemy_kills.get('__boss__', 0) + 1
         app.game._check_all_quests()
         app.game.save_game()
         app.refresh_breeding_combos()

@@ -75,11 +75,18 @@ class BreedingLabScreen(Screen):
         self._female_btn.text = self._female_card.name if self._female_card else '选择雌性'
 
         info_text = ''
+        import time
         if game.breeding_queue:
             for task in game.breeding_queue:
-                remaining = task.get('remaining_time', 0)
-                info_text += f'繁殖中: {task.get("name", "?")} - 剩余 {remaining:.0f}s\n'
-        else:
+                if task.get('completed'):
+                    continue
+                c1 = task.get('card1')
+                c2 = task.get('card2')
+                elapsed = time.time() - task.get('start_time', 0)
+                dur = task.get('duration', 60)
+                remaining = max(0, dur - elapsed)
+                info_text += f'{c1.name}x{c2.name} 剩余{remaining:.0f}s\n'
+        if not info_text:
             info_text = '无进行中的繁殖'
         self._info.clear_widgets()
         self._info.add_widget(Label(text=info_text.strip(), color=(0.8, 0.8, 0.8, 1)))
@@ -114,14 +121,25 @@ class BreedingLabScreen(Screen):
             popup.open()
             return
         app = App.get_running_app()
-        result = app.game.breeding(self._male_card, self._female_card)
-        if result is None:
+        if self._male_card.gender != 'male' or self._female_card.gender != 'female':
             from kivy.uix.popup import Popup
-            popup = Popup(title='繁殖失败', content=Label(text='繁殖失败：请选择不同性别的卡牌'), size_hint=(0.5, 0.3))
+            popup = Popup(title='错误', content=Label(text='性别不匹配，需要一雄一雌'), size_hint=(0.5, 0.3))
             popup.open()
-        else:
-            app.refresh_breeding_combos()
+            return
+        male = self._male_card
+        female = self._female_card
+        def _on_complete():
+            child_chr, child_gender = app.game.breeding(male, female)
+            if child_chr:
+                name = f'{male.name[:2]}{female.name[:2]}子代{len(app.game.cards)+1}'
+                card = app.game.create_card(name, child_gender, chromosomes=child_chr)
+                if card:
+                    app.game._check_all_quests()
+                    app.game.save_game()
             self._refresh()
+        app.game.add_breeding_task(male, female, _on_complete)
+        app.game.save_game()
+        self._refresh()
 
     def _toggle_auto(self):
         app = App.get_running_app()

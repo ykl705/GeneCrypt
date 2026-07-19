@@ -125,9 +125,8 @@ class QuestScreen(Screen):
         if not self._selected_quest:
             return
         app = App.get_running_app()
-        result = app.game.claim_quest(self._selected_quest['id'])
-        msg = result.get('msg', '')
-        if result.get('success'):
+        reward_msgs, _err = app.game.claim_quest(self._selected_quest['id'])
+        if reward_msgs:
             app.game.save_game()
             app.refresh_breeding_combos()
         self._show_detail(self._selected_quest)
