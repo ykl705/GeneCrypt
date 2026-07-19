@@ -143,8 +143,8 @@ class BattleScreen(Screen):
                 lbl._bg = Rectangle(pos=lbl.pos, size=lbl.size)
             lbl.bind(pos=lambda c, v: setattr(c._bg, 'pos', v) if hasattr(c, '_bg') else None,
                       size=lambda c, v: setattr(c._bg, 'size', v) if hasattr(c, '_bg') else None)
+            lbl.bind(on_touch_down=self._on_card_label_touch)
             inner.add_widget(lbl)
-        inner.bind(on_touch_down=self._card_list_touch)
         sv.add_widget(inner)
         right.add_widget(sv)
         two_col.add_widget(right)
@@ -163,24 +163,12 @@ class BattleScreen(Screen):
         clear.bind(on_press=lambda _: self._do_clear_team())
         popup.open()
 
-    def _card_list_touch(self, instance, touch):
-        x, y = instance.to_widget(*touch.pos)
-        for child in instance.children:
-            cx, cy = child.pos
-            cw, ch = child.size
-            if cx <= x <= cx + cw and cy <= y <= cy + ch:
-                card = getattr(child, '_card', None)
-                if card:
-                    self._pending_card = card
-                    self._pending_lbl.text = f'已选中: {card.name}'
-                    return True
+    def _on_card_label_touch(self, lbl, touch):
+        if lbl.collide_point(*touch.pos):
+            self._pending_card = getattr(lbl, '_card', None)
+            if self._pending_card:
+                self._pending_lbl.text = f'已选中: {self._pending_card.name}'
         return False
-
-    def _on_card_pick(self, btn):
-        card = getattr(btn, '_card', None)
-        if card:
-            self._pending_card = card
-            self._pending_lbl.text = f'已选中: {card.name}'
 
     def _on_grid_cell(self, btn):
         pos = getattr(btn, '_pos', -1)
