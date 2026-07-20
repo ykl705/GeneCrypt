@@ -81,6 +81,9 @@ try:
     from screens.battle import BattleScreen
     from screens.challenge import ChallengeScreen
     from screens.stats import StatsScreen
+    from screens.dungeon import DungeonScreen
+    from screens.pvp import PvPScreen
+    from screens.debug_console import DebugConsole
     log_error('Screen imports OK')
 except Exception as e:
     log_error(f'Screen import error: {e}\n{traceback.format_exc()}')
@@ -138,6 +141,9 @@ class GeneCryptApp(App):
             ('任务', QuestScreen),
             ('主题挑战', ChallengeScreen),
             ('数据', StatsScreen),
+            ('副本', DungeonScreen),
+            ('PvP', PvPScreen),
+            ('控制台', DebugConsole),
         ]
         
         self._screen_refs = {}

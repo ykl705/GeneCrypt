@@ -35,9 +35,9 @@ COMPLEMENT = {'A': 'T', 'T': 'A', 'G': 'C', 'C': 'G'}
 # ==========================================
 QUEST_DEFINITIONS = [
     # ==================== 主线 (40) ====================
-    {'id':'m_01','requires':[],'category':'main','type':'clear_stage','target_stage':3,'target':1,'title':'基因觉醒','description':'通关第3关','rewards':[{'type':'gacha_currency','amount':50}]},
-    {'id':'m_02','requires':['m_01'],'category':'main','type':'kill_any','target':5,'title':'初次狩猎','description':'累计击杀5个敌人','rewards':[{'type':'battle_materials','amount':30}]},
-    {'id':'m_03','requires':['m_02'],'category':'main','type':'clear_stage','target_stage':7,'target':1,'title':'深入丛林','description':'通关第7关','rewards':[{'type':'gacha_currency','amount':50},{'type':'card_with_skills','skill_names':['冻结'],'genome_quality':0.3}]},
+    {'id':'m_01','requires':[],'category':'main','type':'clear_stage','target_stage':3,'target':1,'title':'基因觉醒','description':'实验室的应急灯闪烁着红光。培养皿中，一段沉睡万年的基因序列正在苏醒。研究员们屏住呼吸——这是人类第一次唤醒远古基因。通关第3关','story':'你站在GeneCrypt实验室的核心控制台前，全息屏幕上显示着一个从未见过的基因序列。"博士，这个序列在自行重组！"助手的声音充满惊恐。培养液中的细胞开始分裂——一个全新的生命体正在诞生。你伸手触碰屏幕，一道光芒闪过，意识与实验体的神经链接建立了..."},
+    {'id':'m_02','requires':['m_01'],'category':'main','type':'kill_any','target':5,'title':'初次狩猎','description':'新生的基因体需要通过实战来验证其能力。累计击杀5个敌人','story':'苏醒的实验体在你的意识引导下，第一次踏入模拟战场。它的感官是你的延伸——你能感受到空气中基因碎片的气味。"这是狩猎的本能，"你低语道，"去战斗，去进化。"'},
+    {'id':'m_03','requires':['m_02'],'category':'main','type':'clear_stage','target_stage':7,'target':1,'title':'深入丛林','description':'战场模拟切换到了热带雨林环境。新的敌人隐藏在茂密的植被中。通关第7关','story':'模拟器加载了丛林场景。潮湿的空气、腐烂的落叶——一切都如此真实。远处，一个黑影闪过。"有东西在跟踪我们。"你拉近神经链接，实验体的视觉系统立刻捕捉到了三个敌对目标。它们不是自然进化的产物——而是某个竞争对手实验室的失败品，被遗弃在这里。"'},
     {'id':'m_04','requires':['m_03'],'category':'main','type':'clear_stage','target_stage':11,'target':1,'title':'黑暗边缘','description':'通关第11关','rewards':[{'type':'gacha_currency','amount':60}]},
     {'id':'m_05','requires':['m_04'],'category':'main','type':'breed_count','target':3,'title':'生命传承','description':'累计繁殖3次','rewards':[{'type':'gacha_currency','amount':80},{'type':'card_with_skills','skill_names':['甘霖'],'genome_quality':0.35}]},
     {'id':'m_06','requires':['m_05'],'category':'main','type':'clear_stage','target_stage':15,'target':1,'title':'逆境求生','description':'通关第15关','rewards':[{'type':'battle_materials','amount':100}]},
