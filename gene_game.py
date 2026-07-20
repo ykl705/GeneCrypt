@@ -1935,7 +1935,7 @@ class Game:
                 self.quest_progress[qid] = 0
 
     def _grant_achievement_reward(self, ach_id):
-        from gene_config import ACHIEVEMENTS
+        from gene_config import ACHIEVEMENTS, BLOODLINES
         ach = next((a for a in ACHIEVEMENTS if a['id'] == ach_id), None)
         if not ach: return
         r = ach.get('reward', {})
