@@ -84,6 +84,8 @@ try:
     from screens.dungeon import DungeonScreen
     from screens.pvp import PvPScreen
     from screens.debug_console import DebugConsole
+    from screens.equipment import EquipmentScreen
+    from screens.base_building import BaseBuildingScreen
     log_error('Screen imports OK')
 except Exception as e:
     log_error(f'Screen import error: {e}\n{traceback.format_exc()}')
@@ -143,6 +145,8 @@ class GeneCryptApp(App):
             ('数据', StatsScreen),
             ('副本', DungeonScreen),
             ('PvP', PvPScreen),
+            ('装备', EquipmentScreen),
+            ('基建', BaseBuildingScreen),
             ('控制台', DebugConsole),
         ]
         

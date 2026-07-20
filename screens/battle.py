@@ -9,6 +9,7 @@ from kivy.app import App
 from kivy.clock import Clock
 from kivy.metrics import dp
 from battle_config import BATTLE_CONFIG
+import random
 
 
 class BattleScreen(Screen):
@@ -632,6 +633,10 @@ class BattleScreen(Screen):
         app.game.gacha_currency += gacha_reward
         app.game.battle_materials += mat_reward
         app.game.gene_essence += essence_reward
+        if random.random() < 0.15 + stage_num * 0.002:
+            item = app.game.generate_equipment(stage_num)
+            if item:
+                self.add_log(f'[装备掉落] {item["name"]}!')
         next_stage = stage_num + 1
         from battle_config import STAGES
         if next_stage in STAGES and next_stage not in app.game.unlocked_stages:

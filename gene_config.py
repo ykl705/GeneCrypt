@@ -986,3 +986,59 @@ ACHIEVEMENTS = [
     {'id':'a_hidden_speed','name':'闪电战',  'desc':'60秒内完成一场挑战',    'type':'hidden','target':1,'diff':3,'reward':{'chip':'freeze_domain_chip','gene_essence':200}},
     {'id':'a_hidden_perfect','name':'完美无缺','desc':'全因子通关盲盒战争',  'type':'hidden','target':1,'diff':5,'reward':{'card':'完美基因体','gene_essence':2000,'gacha_currency':5000}},
 ]
+
+# ==========================================
+# 装备系统
+# ==========================================
+EQUIPMENT_SLOTS = ['weapon', 'head', 'body', 'accessory', 'boots', 'special']
+EQUIPMENT_SLOT_NAMES = {'weapon':'武器','head':'头部','body':'躯干','accessory':'饰品','boots':'鞋子','special':'特殊'}
+EQUIPMENT_RARITY = [
+    {'id':'common',   'name':'普通', 'color':(0.6,0.6,0.6,1), 'affixes':(1,2), 'prefix':'',  'drop':0.55},
+    {'id':'uncommon', 'name':'精品', 'color':(0.2,0.8,0.2,1), 'affixes':(2,3), 'prefix':'精', 'drop':0.25},
+    {'id':'rare',     'name':'稀有', 'color':(0.2,0.5,1,1),   'affixes':(3,4), 'prefix':'稀', 'drop':0.12},
+    {'id':'epic',     'name':'史诗', 'color':(0.7,0.2,1,1),   'affixes':(4,5), 'prefix':'史', 'drop':0.05},
+    {'id':'legend',   'name':'传说', 'color':(1,0.6,0,1),     'affixes':(5,6), 'prefix':'传', 'drop':0.02},
+    {'id':'ancient',  'name':'远古', 'color':(0.8,0.6,0.2,1), 'affixes':(6,7), 'prefix':'古', 'drop':0.005},
+    {'id':'mythic',   'name':'神话', 'color':(0.2,1,1,1),     'affixes':(7,8), 'prefix':'神', 'drop':0.003},
+    {'id':'chaos',    'name':'混沌', 'color':(1,0,0.5,1),     'affixes':(8,9), 'prefix':'沌', 'drop':0.001},
+]
+EQUIPMENT_AFFIX_POOLS = {
+    'common': [
+        ('ATK', 'attack', 0, 5, 15), ('HP', 'health', 0, 20, 60),
+        ('DEF', 'defense', 0, 3, 10), ('SPD', 'speed', 0, 2, 8),
+    ],
+    'uncommon': [
+        ('ATK', 'attack', 0, 10, 30), ('HP', 'health', 0, 50, 120),
+        ('DEF', 'defense', 0, 5, 20), ('SPD', 'speed', 0, 4, 12),
+        ('CRT', 'critical_rate', 1, 2, 5), ('DDG', 'dodge_rate', 1, 2, 5),
+    ],
+    'rare': [
+        ('ATK', 'attack', 0, 20, 50), ('HP', 'health', 0, 100, 250),
+        ('DEF', 'defense', 0, 10, 35), ('SPD', 'speed', 0, 6, 18),
+        ('CRT', 'critical_rate', 1, 5, 10), ('DDG', 'dodge_rate', 1, 5, 10),
+        ('KLL', 'lifesteal_pct', 1, 5, 10),
+    ],
+    'epic': [
+        ('ATK', 'attack', 0, 40, 100), ('HP', 'health', 0, 200, 500),
+        ('DEF', 'defense', 0, 20, 60), ('SPD', 'speed', 0, 10, 30),
+        ('CRT', 'critical_rate', 1, 8, 20), ('DDG', 'dodge_rate', 1, 8, 15),
+        ('KLL', 'lifesteal_pct', 1, 8, 20), ('RFL', 'reflect_pct', 1, 10, 25),
+    ],
+}
+SET_BONUSES = {
+    'dragon_fury': {'name':'龙裔之怒','pieces':3,'effect':'ATK+30%,火焰吐息→全体'},
+    'frost_heart': {'name':'冰封之心','pieces':3,'effect':'DEF+25%,冻结+1回合'},
+    'shadow_dance': {'name':'暗影之舞','pieces':3,'effect':'SPD+15%,闪避+8%'},
+    'chaos_source': {'name':'混沌之源','pieces':4,'effect':'全属性+25%,每场战斗随机敌人特质一个'},
+}
+
+# ==========================================
+# 基建系统
+# ==========================================
+BASE_BUILDINGS = [
+    {'id':'gene_lab',    'name':'基因研究所', 'icon':'T', 'desc':'全局ATK+{bonus}%',     'per_lv':1, 'max_lv':10},
+    {'id':'breed_center','name':'繁殖中心',   'icon':'B', 'desc':'繁殖速度+{bonus}%',     'per_lv':5, 'max_lv':10},
+    {'id':'training_camp','name':'训练营',    'icon':'G', 'desc':'训练效果+{bonus}%',     'per_lv':3, 'max_lv':10},
+    {'id':'warehouse',   'name':'仓库',       'icon':'W', 'desc':'卡牌上限+{bonus}',      'per_lv':2, 'max_lv':10},
+    {'id':'essence_plant','name':'精华提炼厂', 'icon':'E', 'desc':'离线每小时+{bonus}精华','per_lv':1,'max_lv':10},
+]

@@ -109,4 +109,53 @@ class PvPScreen(Screen):
                    'skills':['火焰吐息'],'passive_abilities':[],'width':1,'height':1,'position':0}]
         detail = '\n'.join(f'  位置{p}: 血脉={t["bloodline"] or "无"} 星={t["star"]} 技能={t["skills"]}' 
                           for p, t in sorted(team.items()))
-        self._result_lbl.text = f'队伍解析成功!\n{detail}\n\n[模拟战斗尚未实现]'
+        result = self._sim_battle(team)
+        self._result_lbl.text = f'队伍解析成功!\n{detail}\n\n{result}'
+
+    def _sim_battle(self, opponent_team):
+        app = App.get_running_app()
+        my_team = app._screen_refs.get('战斗')
+        if not my_team or not my_team._team:
+            return '[需要先在战斗页编队]'
+
+        from gene_game import Card, BattleSystem
+        import random, time
+
+        my_cards = list(my_team._team.values())
+        opp_cards = []
+        for pos, t in sorted(opponent_team.items()):
+            c = Card(f'对手{pos}', random.choice(['male', 'female']))
+            star = t.get('star', 1)
+            c.star = star
+            c.traits['attack'] = 50 + star * 30
+            c.traits['health'] = 200 + star * 100
+            c.traits['defense'] = 20 + star * 10
+            c.traits['speed'] = 10 + star * 5
+            c.traits['critical_rate'] = 5 + star * 2
+            c.traits['dodge_rate'] = 5
+            c.skills = t.get('skills', [])
+            opp_cards.append(c)
+
+        my_ed = [{'name': '模拟对手', 'health': sum(c.traits['health'] for c in opp_cards),
+                   'attack': max(c.traits['attack'] for c in opp_cards),
+                   'defense': max(c.traits['defense'] for c in opp_cards),
+                   'speed': max(c.traits['speed'] for c in opp_cards),
+                   'skills': sum((c.skills for c in opp_cards), []),
+                   'passive_abilities': [], 'width': 1, 'height': 1, 'position': 0}]
+
+        my_grid = {i: c for i, c in enumerate(my_cards)}
+        bs = BattleSystem(my_grid, my_ed, stage_num=1, skill_enhance_level=0)
+        bs.is_running = True
+        ticks = 0
+        while ticks < 200:
+            bs.update_action_bars_frame()
+            if bs.check_winner():
+                break
+            unit = bs.get_next_unit()
+            if unit:
+                bs.execute_turn(unit, None)
+            ticks += 1
+        if bs.winner == 'player':
+            return f'[胜利!] 我方在{ticks}回合内击败对手!'
+        return f'[失败] 对手实力太强...'
+

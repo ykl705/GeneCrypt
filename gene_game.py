@@ -155,6 +155,7 @@ class Card:
         self.modules = []
         self.chips = []
         self.chip_slots = 1
+        self.equipment = {}
     
     @staticmethod
     def _random_genome():
@@ -540,6 +541,21 @@ class Card:
                 if stat and pct > 0 and stat in traits:
                     traits[stat] = int(traits[stat] * (1 + pct))
         
+        eq = getattr(self, 'equipment', None)
+        if eq:
+            import random as _rnd
+            for slot, item in eq.items():
+                affixes = item.get('affixes', [])
+                for aff in affixes:
+                    stat = aff.get('stat', '')
+                    val = aff.get('value', 0)
+                    is_pct = aff.get('is_pct', False)
+                    if stat in traits:
+                        if is_pct:
+                            traits[stat] = int(traits[stat] * (1 + val / 100.0))
+                        else:
+                            traits[stat] = traits.get(stat, 0) + val
+        
         return traits
     
     def _apply_genome_enhancements(self, trait_name, base_value):
@@ -698,6 +714,7 @@ class Card:
             'training': getattr(self, 'training', {}),
             'modules': getattr(self, 'modules', []),
             'chips': getattr(self, 'chips', []),
+            'equipment': getattr(self, 'equipment', {}),
             'chip_slots': getattr(self, 'chip_slots', 1),
         }
     
@@ -744,6 +761,7 @@ class Card:
         card.modules = data.get('modules', [])
         card.chips = data.get('chips', [])
         card.chip_slots = data.get('chip_slots', 1)
+        card.equipment = data.get('equipment', {})
         for chip_info in card.chips:
             skill = chip_info.get('skill_name', '')
             if skill and skill not in card.skills:
@@ -809,6 +827,8 @@ class Game:
         self.module_inventory = {}
         self.challenge_scores = {}
         self.achievements = {}
+        self.equipment_inventory = {}
+        self.base_buildings = {}
         
         if load_save and self.load_game():
             pass
@@ -1522,6 +1542,91 @@ class Game:
             return True, f"合成成功! {MODULE_POOLS[next_id]['name']}"
         return False, "需要2个同等级模组合成"
 
+    def generate_equipment(self, stage_num):
+        from gene_config import EQUIPMENT_SLOTS, EQUIPMENT_RARITY, EQUIPMENT_AFFIX_POOLS, EQUIPMENT_SLOT_NAMES
+        import random
+        roll = random.random()
+        cumulative = 0
+        chosen_rarity = EQUIPMENT_RARITY[0]
+        for r in EQUIPMENT_RARITY:
+            cumulative += r['drop']
+            if roll < cumulative:
+                chosen_rarity = r
+                break
+        slot = random.choice(EQUIPMENT_SLOTS)
+        pool = EQUIPMENT_AFFIX_POOLS.get(chosen_rarity['id'], EQUIPMENT_AFFIX_POOLS['common'])
+        min_a, max_a = chosen_rarity['affixes']
+        n_affixes = random.randint(min_a, min(max_a, len(pool)))
+        picked = random.sample(pool, min(n_affixes, len(pool)))
+        affixes = []
+        for code, stat_key, is_pct, lo, hi in picked:
+            val = random.randint(lo, hi)
+            suffix = '%' if is_pct else ''
+            affixes.append({'code': code, 'stat': stat_key, 'value': val, 'is_pct': bool(is_pct)})
+        item_id = f'{slot}_{chosen_rarity["id"]}_{random.randint(1000,9999)}'
+        name = f'{chosen_rarity["prefix"]}{EQUIPMENT_SLOT_NAMES.get(slot,slot)}'
+        item = {
+            'id': item_id, 'slot': slot, 'rarity': chosen_rarity['id'],
+            'name': name, 'affixes': affixes,
+        }
+        self.equipment_inventory[item_id] = self.equipment_inventory.get(item_id, 0) + 1
+        return item
+
+    def equip_item(self, card, item_id):
+        item = None
+        for inv_id in list(self.equipment_inventory.keys()):
+            if inv_id == item_id and self.equipment_inventory[inv_id] > 0:
+                item = {'id': inv_id, 'slot': self._parse_equip_slot(inv_id),
+                        'rarity': self._parse_equip_rarity(inv_id)}
+                self.equipment_inventory[inv_id] -= 1
+                if self.equipment_inventory[inv_id] <= 0:
+                    del self.equipment_inventory[inv_id]
+                break
+        if not item:
+            return False, "装备不存在"
+        slot = item['slot']
+        old = card.equipment.get(slot)
+        if old:
+            self.equipment_inventory[old['id']] = self.equipment_inventory.get(old['id'], 0) + 1
+        card.equipment[slot] = item
+        card.traits = card.calculate_traits()
+        return True, "装备成功"
+
+    def unequip_item(self, card, slot):
+        if slot not in card.equipment:
+            return False, "该槽位无装备"
+        item = card.equipment.pop(slot)
+        self.equipment_inventory[item['id']] = self.equipment_inventory.get(item['id'], 0) + 1
+        card.traits = card.calculate_traits()
+        return True, "已卸下"
+
+    def _parse_equip_slot(self, item_id):
+        parts = item_id.split('_')
+        return parts[0] if parts else ''
+
+    def _parse_equip_rarity(self, item_id):
+        parts = item_id.split('_')
+        return parts[1] if len(parts) > 1 else 'common'
+
+    def upgrade_building(self, bid):
+        from gene_config import BASE_BUILDINGS
+        bld = next((b for b in BASE_BUILDINGS if b['id'] == bid), None)
+        if not bld:
+            return False, "建筑不存在"
+        lv = self.base_buildings.get(bid, 0)
+        if lv >= bld['max_lv']:
+            return False, "已满级"
+        cost_mats = 50 + lv * 30
+        cost_essence = 5 + lv * 3
+        if self.battle_materials < cost_mats:
+            return False, f"材料不足(需要{cost_mats})"
+        if self.gene_essence < cost_essence:
+            return False, f"精华不足(需要{cost_essence})"
+        self.battle_materials -= cost_mats
+        self.gene_essence -= cost_essence
+        self.base_buildings[bid] = lv + 1
+        return True, f"升级成功! Lv.{lv+1}"
+
     def _get_chip_slots(self, card):
         star = getattr(card, 'star', 1)
         if star >= 5:
@@ -2069,6 +2174,8 @@ class Game:
                 'module_inventory': self.module_inventory,
                 'challenge_scores': self.challenge_scores,
                 'achievements': self.achievements,
+                'equipment_inventory': self.equipment_inventory,
+                'base_buildings': self.base_buildings,
             }
             tmp = self.SAVE_FILE + '.tmp'
             with open(tmp, 'w', encoding='utf-8') as f:
@@ -2123,6 +2230,8 @@ class Game:
             self.module_inventory = save_data.get('module_inventory', {})
             self.challenge_scores = save_data.get('challenge_scores', {})
             self.achievements = save_data.get('achievements', {})
+            self.equipment_inventory = save_data.get('equipment_inventory', {})
+            self.base_buildings = save_data.get('base_buildings', {})
             Card.card_count = save_data.get('card_count', len(self.cards))
             
             old_ver = save_data.get('save_version', 0)
