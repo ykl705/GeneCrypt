@@ -80,6 +80,7 @@ try:
     from screens.tech_tree import TechTreeScreen
     from screens.battle import BattleScreen
     from screens.challenge import ChallengeScreen
+    from screens.stats import StatsScreen
     log_error('Screen imports OK')
 except Exception as e:
     log_error(f'Screen import error: {e}\n{traceback.format_exc()}')
@@ -136,6 +137,7 @@ class GeneCryptApp(App):
             ('敌人图鉴', BestiaryScreen),
             ('任务', QuestScreen),
             ('主题挑战', ChallengeScreen),
+            ('数据', StatsScreen),
         ]
         
         self._screen_refs = {}

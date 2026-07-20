@@ -808,6 +808,7 @@ class Game:
         self.chip_inventory = {}
         self.module_inventory = {}
         self.challenge_scores = {}
+        self.achievements = {}
         
         if load_save and self.load_game():
             pass
@@ -1828,6 +1829,28 @@ class Game:
             if qid not in self.quest_progress:
                 self.quest_progress[qid] = 0
 
+    def _grant_achievement_reward(self, ach_id):
+        from gene_config import ACHIEVEMENTS
+        ach = next((a for a in ACHIEVEMENTS if a['id'] == ach_id), None)
+        if not ach: return
+        r = ach.get('reward', {})
+        for k, v in r.items():
+            if k == 'battle_mats':
+                self.battle_materials += v
+            elif k == 'gacha_currency':
+                self.gacha_currency += v
+            elif k == 'gene_essence':
+                self.gene_essence += v
+            elif k == 'chip':
+                self.chip_inventory[v] = self.chip_inventory.get(v, 0) + 1
+            elif k == 'module':
+                self.module_inventory[v] = self.module_inventory.get(v, 0) + 1
+            elif k == 'card':
+                card = self._create_skill_reward_card(['万象终结'], quality=0.7)
+                if card:
+                    card.name = v
+                    card.bloodline = random.choice(list(BLOODLINES.keys())) if BLOODLINES else None
+
     def _get_quest_progress(self, qid):
         qd = next(q for q in QUEST_DEFINITIONS if q['id'] == qid)
         t = qd['type']
@@ -1877,6 +1900,48 @@ class Game:
         for qd in QUEST_DEFINITIONS:
             if self._check_quest(qd['id']):
                 newly.append(qd)
+        from gene_config import ACHIEVEMENTS
+        for ach in ACHIEVEMENTS:
+            aid = ach['id']
+            if aid in self.achievements:
+                continue
+            atype = ach['type']
+            if atype == 'total_wins':
+                p = self.max_stage
+            elif atype == 'boss_kills':
+                p = self.enemy_kills.get('__boss__', 0)
+            elif atype == 'max_stage':
+                p = self.max_stage
+            elif atype == 'no_loss_count':
+                p = len(self.no_loss_stages)
+            elif atype == 'breed_count':
+                p = self.breed_counter
+            elif atype == 'have_cards':
+                p = len(self.cards)
+            elif atype == 'bloodline_collect':
+                bls = set(getattr(c, 'bloodline', None) for c in self.cards if c.is_alive)
+                bls.discard(None)
+                p = len(bls)
+            elif atype == 'star_count':
+                p = sum(1 for c in self.cards if getattr(c, 'star', 1) >= 5)
+            elif atype == 'chip_equip':
+                p = 1 if any(c.chips for c in self.cards) else 0
+            elif atype == 'training_complete':
+                p = sum(1 for c in self.cards if len(getattr(c, 'training', {})) >= 4 and c.is_alive)
+            elif atype == 'module_collect':
+                from gene_config import MODULE_POOLS
+                p = sum(1 for mid, v in MODULE_POOLS.items() if v['level'] == 3 and self.module_inventory.get(mid, 0) > 0)
+            elif atype == 'challenge_score':
+                p = max(self.challenge_scores.values(), key=lambda x: x.get('points', 0)).get('points', 0)
+            elif atype == 'hidden':
+                continue
+            else:
+                p = 0
+            if p >= ach['target']:
+                self.achievements[aid] = True
+                newly_ach = next((a for a in ACHIEVEMENTS if a['id'] == aid), None)
+                if newly_ach:
+                    newly.append({'id': aid, 'title': f'[成就] {newly_ach["name"]}', 'rewards': [{'type': 'achievement', 'ach_id': aid}]})
         return newly
 
     def claim_quest(self, qid):
@@ -1892,6 +1957,11 @@ class Game:
                 elif r['type'] == 'battle_materials':
                     self.battle_materials += r['amount']
                     reward_msgs.append(f"战斗材料 +{r['amount']}")
+                elif r['type'] == 'achievement':
+                    ach_id = r.get('ach_id')
+                    if ach_id:
+                        self._grant_achievement_reward(ach_id)
+                        reward_msgs.append("成就奖励已发放!")
                 elif r['type'] == 'card_with_skills':
                     gq = r.get('genome_quality', 0.0)
                     card = self._create_skill_reward_card(r.get('skill_names', []), quality=gq)
@@ -1998,6 +2068,7 @@ class Game:
                 'chip_inventory': self.chip_inventory,
                 'module_inventory': self.module_inventory,
                 'challenge_scores': self.challenge_scores,
+                'achievements': self.achievements,
             }
             tmp = self.SAVE_FILE + '.tmp'
             with open(tmp, 'w', encoding='utf-8') as f:
@@ -2051,6 +2122,7 @@ class Game:
             self.chip_inventory = save_data.get('chip_inventory', {})
             self.module_inventory = save_data.get('module_inventory', {})
             self.challenge_scores = save_data.get('challenge_scores', {})
+            self.achievements = save_data.get('achievements', {})
             Card.card_count = save_data.get('card_count', len(self.cards))
             
             old_ver = save_data.get('save_version', 0)
@@ -2214,6 +2286,7 @@ class Enemy:
             if tmpl['name'] == self.name:
                 self.template_key = tid
                 break
+        self._traits = []
         self.total_damage_dealt = 0
         self.is_overlord = enemy_data.get('is_overlord', False)
         self.grid_size = grid_size
@@ -2412,6 +2485,8 @@ class BattleSystem:
             enemy._enemies_ref = self.enemies
 
         self.stage_num = stage_num
+        if stage_num >= 50:
+            self._assign_traits()
         self.is_running = False
         self.is_auto = False
         self.winner = None
@@ -2422,6 +2497,46 @@ class BattleSystem:
         self._all_units_cache = self.player_team + self.enemies
         for enemy in self.enemies:
             enemy._enemies_ref = self.enemies
+
+    def _assign_traits(self):
+        import random
+        from gene_config import ENEMY_TRAITS
+        available = [tid for tid, t in ENEMY_TRAITS.items() if t.get('unlock', 0) <= self.stage_num]
+        if not available:
+            return
+        trait_count = min(2, self.stage_num // 30)
+        for enemy in self.enemies:
+            if getattr(enemy, 'annihilate', False) or getattr(enemy, 'immune_to_debuffs', False):
+                continue
+            enemy._traits = []
+            weights = [ENEMY_TRAITS[tid]['weight'] for tid in available]
+            try:
+                picked = random.choices(available, weights=weights, k=min(trait_count, len(available)))
+            except ValueError:
+                continue
+            for tid in picked:
+                td = ENEMY_TRAITS[tid]
+                enemy._traits.append(tid)
+                if td['type'] == 'stat':
+                    if 'hp_pct' in td:
+                        enemy.max_health = int(enemy.max_health * (1 + td['hp_pct']))
+                        enemy.current_health = enemy.max_health
+                    if 'atk_pct' in td:
+                        enemy.attack = int(enemy.attack * (1 + td['atk_pct']))
+                    if 'spd_pct' in td:
+                        enemy.speed = int(enemy.speed * (1 + td['spd_pct']))
+                elif td['type'] == 'entry' and 'shield_pct' in td:
+                    enemy.shield = int(enemy.max_health * td['shield_pct'])
+                elif td['type'] == 'entry' and 'atb_init' in td:
+                    enemy.action_bar = BATTLE_CONFIG['action_bar_max'] * td['atb_init']
+                elif td['type'] == 'immune':
+                    enemy.immune_to_debuffs = True
+                elif td['type'] == 'pierce':
+                    enemy._pierce_pct = td['pct']
+                elif td['type'] == 'reflect':
+                    enemy.passive_skills['荆棘'] = int(td['pct'] * 100)
+                elif td['type'] == 'lifesteal':
+                    enemy._lifesteal_pct = td['pct']
     
     def add_log(self, message):
         self.battle_log.append(message)

@@ -938,3 +938,51 @@ CHALLENGE_GROUPS_BY_THEME = {
     'blind_box_war': ['战场', '阵型', '队伍', '波次', '回响', '盲盒', '资源', '陷阱', '激活', '随机'],
 }
 CHALLENGE_GROUP_ORDER = CHALLENGE_GROUPS_BY_THEME['ancient_ruins']  # 默认
+
+# ==========================================
+# 敌人特质系统（50关后激活）
+# ==========================================
+ENEMY_TRAITS = {
+    'regeneration':    {'name': '再生',   'desc': '每回合恢复5%最大生命',           'type': 'heal',    'value': 0.05, 'weight': 1, 'unlock': 50},
+    'berserk':         {'name': '狂暴',   'desc': 'HP<30%时攻击力翻倍',            'type': 'trigger', 'hp_thr': 0.3, 'atk_mul': 2.0, 'weight': 2, 'unlock': 50},
+    'toxic':           {'name': '毒域',   'desc': '登场给全体敌方上3层中毒',        'type': 'entry',   'status': 'poison', 'stacks': 3, 'weight': 1, 'unlock': 50},
+    'clone':           {'name': '克隆',   'desc': '每3回合在空格复制自身',          'type': 'periodic','interval': 3, 'action': 'clone', 'weight': 2, 'unlock': 60},
+    'shielded':        {'name': '护盾',   'desc': '开场获得40%最大生命护盾',        'type': 'entry',   'shield_pct': 0.4, 'weight': 1, 'unlock': 50},
+    'thorns':          {'name': '反伤',   'desc': '受到伤害反弹25%',               'type': 'reflect', 'pct': 0.25, 'weight': 1, 'unlock': 50},
+    'vampiric':        {'name': '吸血',   'desc': '造成伤害30%转化生命',           'type': 'lifesteal','pct': 0.3, 'weight': 2, 'unlock': 55},
+    'pierce':          {'name': '破甲',   'desc': '攻击无视50%防御',              'type': 'pierce',  'pct': 0.5, 'weight': 2, 'unlock': 60},
+    'cc_immune':       {'name': '免控',   'desc': '免疫睡眠/麻痹/冻结/混乱',        'type': 'immune',  'weight': 2, 'unlock': 55},
+    'death_summon':    {'name': '亡语·召唤','desc': '死亡时召唤2个低级敌人',         'type': 'ondeath', 'action': 'summon', 'count': 2, 'weight': 2, 'unlock': 65},
+    'death_poison':    {'name': '亡语·毒爆','desc': '死亡时全体敌方5层中毒',         'type': 'ondeath', 'action': 'poison_all', 'stacks': 5, 'weight': 2, 'unlock': 65},
+    'thick_skin':      {'name': '厚皮',   'desc': '最大生命+50%',                'type': 'stat',    'hp_pct': 0.5, 'weight': 1, 'unlock': 50},
+    'sharp_claw':      {'name': '利爪',   'desc': '攻击力+30%',                  'type': 'stat',    'atk_pct': 0.3, 'weight': 1, 'unlock': 50},
+    'swift':           {'name': '疾风',   'desc': '速度+20%',                   'type': 'stat',    'spd_pct': 0.2, 'weight': 1, 'unlock': 50},
+    'headstart':       {'name': '先手',   'desc': '行动条初始80%',               'type': 'entry',   'atb_init': 0.8, 'weight': 2, 'unlock': 70},
+}
+
+# ==========================================
+# 成就系统
+# ==========================================
+ACHIEVEMENTS = [
+    {'id':'a_battle_1',  'name':'初战告捷', 'desc':'赢得第一场战斗',        'type':'total_wins', 'target':1,    'diff':1, 'reward':{'battle_mats':30}},
+    {'id':'a_battle_10', 'name':'百战勇士', 'desc':'赢得100场战斗',         'type':'total_wins', 'target':100,  'diff':2, 'reward':{'battle_mats':200, 'gene_essence':20}},
+    {'id':'a_boss_5',    'name':'猎手',    'desc':'击败5个BOSS',            'type':'boss_kills','target':5,    'diff':1, 'reward':{'battle_mats':50}},
+    {'id':'a_boss_50',   'name':'BOSS终结者','desc':'击败50个BOSS',         'type':'boss_kills','target':50,   'diff':3, 'reward':{'gacha_currency':300, 'gene_essence':50}},
+    {'id':'a_stage_50',  'name':'半百之旅', 'desc':'通关第50关',            'type':'max_stage', 'target':50,   'diff':1, 'reward':{'gacha_currency':150}},
+    {'id':'a_stage_100', 'name':'百关突破', 'desc':'通关第100关',           'type':'max_stage', 'target':100,  'diff':2, 'reward':{'gacha_currency':500, 'gene_essence':100}},
+    {'id':'a_no_loss_10','name':'完美十战', 'desc':'无阵亡通关10个不同关卡', 'type':'no_loss_count','target':10,'diff':2, 'reward':{'chip':'heal_chip'}},
+    {'id':'a_breed_1',   'name':'初代诞生', 'desc':'完成1次繁殖',           'type':'breed_count','target':1,   'diff':1, 'reward':{'battle_mats':20}},
+    {'id':'a_breed_50',  'name':'繁殖能手', 'desc':'完成50次繁殖',          'type':'breed_count','target':50,  'diff':2, 'reward':{'gene_essence':30}},
+    {'id':'a_breed_200', 'name':'基因传播者','desc':'完成200次繁殖',        'type':'breed_count','target':200, 'diff':3, 'reward':{'chip':'curse_chip', 'gene_essence':100}},
+    {'id':'a_card_10',   'name':'收集者',   'desc':'拥有10张卡牌',          'type':'have_cards', 'target':10,  'diff':1, 'reward':{'battle_mats':50}},
+    {'id':'a_card_50',   'name':'收藏家',   'desc':'拥有50张卡牌',          'type':'have_cards', 'target':50,  'diff':2, 'reward':{'gacha_currency':200}},
+    {'id':'a_star_5',    'name':'星光闪耀', 'desc':'一张卡牌达到5星',       'type':'star_count', 'target':1,   'diff':3, 'reward':{'module':'atk_mod_3'}},
+    {'id':'a_bloodline_all','name':'血脉收集者','desc':'拥有全部6种血脉',   'type':'bloodline_collect','target':6,'diff':3,'reward':{'chip':'absolute_chip','gene_essence':200}},
+    {'id':'a_chip_equip','name':'芯片初装', 'desc':'给卡牌装备技能芯片',     'type':'chip_equip','target':1,    'diff':1, 'reward':{'chip':'shield_chip'}},
+    {'id':'a_module_all','name':'模组收藏家','desc':'拥有每种L3模组至少1个','type':'module_collect','target':4,'diff':3,'reward':{'gacha_currency':500,'gene_essence':150}},
+    {'id':'a_training_all','name':'全面训练','desc':'一张卡牌4项属性均完成训练','type':'training_complete','target':1,'diff':2,'reward':{'battle_mats':100}},
+    {'id':'a_infinity_30','name':'无尽之始','desc':'挑战模式积分达2000','type':'challenge_score','target':2000,'diff':2,'reward':{'gacha_currency':300}},
+    {'id':'a_hidden_immortal','name':'不朽传奇','desc':'一张卡牌在挑战模式中战无不胜','type':'hidden','target':1,'diff':4,'reward':{'card':'不朽龙裔','gene_essence':500,'gacha_currency':1000}},
+    {'id':'a_hidden_speed','name':'闪电战',  'desc':'60秒内完成一场挑战',    'type':'hidden','target':1,'diff':3,'reward':{'chip':'freeze_domain_chip','gene_essence':200}},
+    {'id':'a_hidden_perfect','name':'完美无缺','desc':'全因子通关盲盒战争',  'type':'hidden','target':1,'diff':5,'reward':{'card':'完美基因体','gene_essence':2000,'gacha_currency':5000}},
+]

@@ -264,6 +264,19 @@ class BattleScreen(Screen):
         self._battle_running = True
         self._render_battle_grid()
         self.add_log('战斗开始!')
+        if stage_num >= 50:
+            traited = [e for e in self._battle_system.enemies if getattr(e, '_traits', [])]
+            if traited:
+                from gene_config import ENEMY_TRAITS
+                tdesc = []
+                for e in traited:
+                    for tid in e._traits:
+                        if tid in ENEMY_TRAITS:
+                            tdesc.append(f'{e.name}: [{ENEMY_TRAITS[tid]["name"]}] {ENEMY_TRAITS[tid]["desc"]}')
+                hint_text = '敌人特质!\n' + '\n'.join(tdesc[:4])
+                popup = Popup(title='敌人特质', content=Label(text=hint_text, size_hint_y=None, height=dp(200)),
+                              size_hint=(0.7, 0.5))
+                popup.open()
         Clock.schedule_interval(self._battle_tick, 0.3)
 
     def _render_battle_grid(self):
@@ -461,6 +474,11 @@ class BattleScreen(Screen):
         cell.add_widget(bar2)
 
         skills_text = ','.join(unit.skills[:2]) if unit.skills else '-'
+        traits = getattr(unit, '_traits', [])
+        if traits:
+            from gene_config import ENEMY_TRAITS
+            tnames = [ENEMY_TRAITS[t]['name'] for t in traits[:2] if t in ENEMY_TRAITS]
+            skills_text = '/'.join(tnames) if tnames else skills_text
         statuses = []
         for k in unit.status_effects:
             if k in ('poison', 'burn', 'bleed', 'freeze', 'paralyze', 'sleep'):
