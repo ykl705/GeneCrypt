@@ -79,6 +79,7 @@ try:
     from screens.gene_engineering import GeneEngineeringScreen
     from screens.tech_tree import TechTreeScreen
     from screens.battle import BattleScreen
+    from screens.challenge import ChallengeScreen
     log_error('Screen imports OK')
 except Exception as e:
     log_error(f'Screen import error: {e}\n{traceback.format_exc()}')
@@ -121,7 +122,7 @@ class GeneCryptApp(App):
         self._load_kv_files()
         
         # 创建 TabbedPanel
-        tp = TabbedPanel(do_default_tab=False, tab_width=dp(120))
+        tp = TabbedPanel(do_default_tab=False, tab_width=dp(100))
         tp.background_color = (0.1, 0.1, 0.2, 1)
         tp.background = ''
         
@@ -134,6 +135,7 @@ class GeneCryptApp(App):
             ('战斗', BattleScreen),
             ('敌人图鉴', BestiaryScreen),
             ('任务', QuestScreen),
+            ('主题挑战', ChallengeScreen),
         ]
         
         self._screen_refs = {}

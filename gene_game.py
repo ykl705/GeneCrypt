@@ -807,6 +807,7 @@ class Game:
         self.gene_essence = 0
         self.chip_inventory = {}
         self.module_inventory = {}
+        self.challenge_scores = {}
         
         if load_save and self.load_game():
             pass
@@ -1996,6 +1997,7 @@ class Game:
                 'gene_essence': self.gene_essence,
                 'chip_inventory': self.chip_inventory,
                 'module_inventory': self.module_inventory,
+                'challenge_scores': self.challenge_scores,
             }
             tmp = self.SAVE_FILE + '.tmp'
             with open(tmp, 'w', encoding='utf-8') as f:
@@ -2048,6 +2050,7 @@ class Game:
             self.gene_essence = save_data.get('gene_essence', 0)
             self.chip_inventory = save_data.get('chip_inventory', {})
             self.module_inventory = save_data.get('module_inventory', {})
+            self.challenge_scores = save_data.get('challenge_scores', {})
             Card.card_count = save_data.get('card_count', len(self.cards))
             
             old_ver = save_data.get('save_version', 0)

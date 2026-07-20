@@ -635,6 +635,22 @@ class BattleScreen(Screen):
         self._reward_box.clear_widgets()
         reward_text = f'奖励: +{gacha_reward} +{mat_reward} +{essence_reward}精华'
         self._reward_box.add_widget(Label(text=reward_text, color=(1, 1, 0.6, 1)))
+        ci = getattr(self, '_challenge_info', None)
+        if ci:
+            import time
+            elapsed = int(time.time() - ci['start_time'])
+            mins, secs = divmod(elapsed, 60)
+            score_entry = {
+                'points': ci['points'],
+                'time_str': f'{mins:02d}:{secs:02d}',
+                'elapsed': elapsed,
+            }
+            tid = ci['theme_id']
+            old = app.game.challenge_scores.get(tid)
+            if not old or ci['points'] > old.get('points', 0):
+                app.game.challenge_scores[tid] = score_entry
+            app.game.save_game()
+            self.add_log(f'[挑战] 完成! 得分:{ci["points"]} 用时:{mins:02d}:{secs:02d}')
 
     def add_log(self, msg):
         self._log.add_widget(Label(text=str(msg), size_hint_y=None, height=dp(20),
