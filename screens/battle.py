@@ -86,6 +86,10 @@ class BattleScreen(Screen):
         close_btn.bind(on_press=popup.dismiss)
         popup.open()
         self._stage_popup = popup
+        if inner.children:
+            total = len(inner.children)
+            idx = max(0, min(total-1, self._selected_stage-1))
+            sv.scroll_y = 1 - (idx / max(total-1, 1))
 
     def _select_stage(self, snum):
         self._selected_stage = snum

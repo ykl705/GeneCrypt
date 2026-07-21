@@ -7,6 +7,7 @@ from kivy.uix.popup import Popup
 from kivy.app import App
 from kivy.metrics import dp
 from gene_config import EQUIPMENT_SLOTS, EQUIPMENT_SLOT_NAMES, EQUIPMENT_RARITY, SET_BONUSES
+import os
 
 
 class EquipmentScreen(Screen):
@@ -77,26 +78,42 @@ class EquipmentScreen(Screen):
             item = card.equipment.get(slot)
             sname = EQUIPMENT_SLOT_NAMES.get(slot, slot)
             if item:
-                txt = f'[{sname}] {item.get("name",item["id"])}'
-                clr = (0.6,1,0.6,1)
-                btn = Button(text=txt, color=clr, size_hint_y=None, height=dp(36),
-                             on_press=lambda _, s=slot: self._unequip(s))
+                name = item.get('name', item.get('id','?'))
+                rarity = item.get('rarity', 'common')
+                rinfo = next((r for r in EQUIPMENT_RARITY if r['id'] == rarity), {'color':(0.6,1,0.6,1)})
+                txt = f'[{sname}] {name}'
+                clr = rinfo['color']
+                row = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(34), spacing=dp(4))
+                img_path = os.path.join('assets', 'equipment', f'{slot}_{rarity}.png')
+                if os.path.exists(img_path):
+                    from kivy.uix.image import Image as KivyImg
+                    row.add_widget(KivyImg(source=img_path, size_hint_x=None, width=dp(28)))
+                row.add_widget(Label(text=txt, color=clr, size_hint_x=0.7))
+                btn = Button(text='卸下', size_hint_x=0.3, on_press=lambda _, s=slot: self._unequip(s))
+                row.add_widget(btn)
+                self._slot_box.add_widget(row)
             else:
                 btn = Button(text=f'[{sname}] 空', color=(0.4,0.4,0.4,1),
                              size_hint_y=None, height=dp(36))
             self._slot_box.add_widget(btn)
 
-        for item_id, count in app.game.equipment_inventory.items():
-            if count <= 0: continue
-            slot = item_id.split('_')[0]
-            rarity = item_id.split('_')[1] if len(item_id.split('_')) > 1 else 'common'
+        for inv_id, inv_entry in app.game.equipment_inventory.items():
+            if inv_entry.get('count', 0) <= 0: continue
+            item = inv_entry.get('data', {})
+            slot = item.get('slot', inv_id.split('_')[0])
+            rarity = item.get('rarity', inv_id.split('_')[1] if len(inv_id.split('_'))>1 else 'common')
             rinfo = next((r for r in EQUIPMENT_RARITY if r['id'] == rarity), {'name':'?','color':(0.5,0.5,0.5,1)})
             sname = EQUIPMENT_SLOT_NAMES.get(slot, slot)
-            txt = f'[{rinfo["name"]}] {sname} x{count}'
+            name = item.get('name', f'{rinfo["name"]}装备')
+            txt = f'[{rinfo["name"]}] {name} x{inv_entry["count"]}'
             row = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(34), spacing=dp(4))
-            row.add_widget(Label(text=txt, color=rinfo['color'], size_hint_x=0.7))
-            btn = Button(text='装备', size_hint_x=0.3,
-                         on_press=lambda _, iid=item_id: self._equip(iid))
+            img_path = os.path.join('assets', 'equipment', f'{slot}_{rarity}.png')
+            if os.path.exists(img_path):
+                from kivy.uix.image import Image as KivyImg
+                row.add_widget(KivyImg(source=img_path, size_hint_x=None, width=dp(28)))
+            row.add_widget(Label(text=txt, color=rinfo['color'], size_hint_x=0.55))
+            btn = Button(text='装备', size_hint_x=0.25,
+                         on_press=lambda _, iid=inv_id: self._equip(iid))
             row.add_widget(btn)
             self._inv_box.add_widget(row)
 

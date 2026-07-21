@@ -156,6 +156,8 @@ class Card:
         self.chips = []
         self.chip_slots = 1
         self.equipment = {}
+        self.favorite = False
+        self.base_traits = {}
     
     @staticmethod
     def _random_genome():
@@ -491,6 +493,8 @@ class Card:
             if trait_name in STAT_ENHANCE_REGIONS:
                 traits[trait_name] = self._apply_genome_enhancements(trait_name, traits[trait_name])
         
+        self.base_traits = dict(traits)
+        
         # Apply life_extension bonus to lifespan trait
         life_mult = getattr(Card, '_life_extension_mult', 1.0)
         if life_mult != 1.0 and 'lifespan' in traits:
@@ -716,6 +720,8 @@ class Card:
             'chips': getattr(self, 'chips', []),
             'equipment': getattr(self, 'equipment', {}),
             'chip_slots': getattr(self, 'chip_slots', 1),
+            'favorite': getattr(self, 'favorite', False),
+            'base_traits': getattr(self, 'base_traits', {}),
         }
     
     @staticmethod
@@ -762,6 +768,8 @@ class Card:
         card.chips = data.get('chips', [])
         card.chip_slots = data.get('chip_slots', 1)
         card.equipment = data.get('equipment', {})
+        card.favorite = data.get('favorite', False)
+        card.base_traits = data.get('base_traits', {})
         for chip_info in card.chips:
             skill = chip_info.get('skill_name', '')
             if skill and skill not in card.skills:
@@ -1543,7 +1551,7 @@ class Game:
         return False, "需要2个同等级模组合成"
 
     def generate_equipment(self, stage_num):
-        from gene_config import EQUIPMENT_SLOTS, EQUIPMENT_RARITY, EQUIPMENT_AFFIX_POOLS, EQUIPMENT_SLOT_NAMES
+        from gene_config import EQUIPMENT_SLOTS, EQUIPMENT_RARITY, EQUIPMENT_AFFIX_POOLS, EQUIPMENT_SLOT_NAMES, EQUIPMENT_NAMES
         import random
         roll = random.random()
         cumulative = 0
@@ -1561,29 +1569,27 @@ class Game:
         affixes = []
         for code, stat_key, is_pct, lo, hi in picked:
             val = random.randint(lo, hi)
-            suffix = '%' if is_pct else ''
             affixes.append({'code': code, 'stat': stat_key, 'value': val, 'is_pct': bool(is_pct)})
         item_id = f'{slot}_{chosen_rarity["id"]}_{random.randint(1000,9999)}'
-        name = f'{chosen_rarity["prefix"]}{EQUIPMENT_SLOT_NAMES.get(slot,slot)}'
+        name_pool = EQUIPMENT_NAMES.get(slot, {}).get(chosen_rarity['id'], [f'{chosen_rarity["prefix"]}{EQUIPMENT_SLOT_NAMES.get(slot,slot)}'])
+        real_name = random.choice(name_pool)
         item = {
             'id': item_id, 'slot': slot, 'rarity': chosen_rarity['id'],
-            'name': name, 'affixes': affixes,
+            'name': real_name, 'affixes': affixes,
         }
-        self.equipment_inventory[item_id] = self.equipment_inventory.get(item_id, 0) + 1
+        if item_id not in self.equipment_inventory:
+            self.equipment_inventory[item_id] = {'data': item, 'count': 0}
+        self.equipment_inventory[item_id]['count'] += 1
         return item
 
     def equip_item(self, card, item_id):
-        item = None
-        for inv_id in list(self.equipment_inventory.keys()):
-            if inv_id == item_id and self.equipment_inventory[inv_id] > 0:
-                item = {'id': inv_id, 'slot': self._parse_equip_slot(inv_id),
-                        'rarity': self._parse_equip_rarity(inv_id)}
-                self.equipment_inventory[inv_id] -= 1
-                if self.equipment_inventory[inv_id] <= 0:
-                    del self.equipment_inventory[inv_id]
-                break
-        if not item:
+        inv_entry = self.equipment_inventory.get(item_id)
+        if not inv_entry or inv_entry.get('count', 0) <= 0:
             return False, "装备不存在"
+        item = dict(inv_entry['data'])
+        inv_entry['count'] -= 1
+        if inv_entry['count'] <= 0:
+            del self.equipment_inventory[item_id]
         slot = item['slot']
         old = card.equipment.get(slot)
         if old:
@@ -1596,7 +1602,10 @@ class Game:
         if slot not in card.equipment:
             return False, "该槽位无装备"
         item = card.equipment.pop(slot)
-        self.equipment_inventory[item['id']] = self.equipment_inventory.get(item['id'], 0) + 1
+        iid = item['id']
+        if iid not in self.equipment_inventory:
+            self.equipment_inventory[iid] = {'data': item, 'count': 0}
+        self.equipment_inventory[iid]['count'] += 1
         card.traits = card.calculate_traits()
         return True, "已卸下"
 
@@ -1955,6 +1964,30 @@ class Game:
                 if card:
                     card.name = v
                     card.bloodline = random.choice(list(BLOODLINES.keys())) if BLOODLINES else None
+
+    def claim_achievement(self, ach_id):
+        if ach_id not in self.achievements:
+            return None, "成就未完成"
+        from gene_config import ACHIEVEMENTS
+        ach = next((a for a in ACHIEVEMENTS if a['id'] == ach_id), None)
+        if not ach:
+            return None, "成就不存在"
+        r = ach.get('reward', {})
+        msgs = []
+        for k, v in r.items():
+            if k == 'battle_mats': self.battle_materials += v; msgs.append(f'材料+{v}')
+            elif k == 'gacha_currency': self.gacha_currency += v; msgs.append(f'密钥+{v}')
+            elif k == 'gene_essence': self.gene_essence += v; msgs.append(f'精华+{v}')
+            elif k == 'chip': self.chip_inventory[v] = self.chip_inventory.get(v,0)+1; msgs.append(f'芯片+1')
+            elif k == 'module': self.module_inventory[v] = self.module_inventory.get(v,0)+1; msgs.append(f'模组+1')
+            elif k == 'card':
+                card = self._create_skill_reward_card(['万象终结'], quality=0.7)
+                if card:
+                    card.name = v
+                    card.bloodline = random.choice(list(BLOODLINES.keys()))
+                    msgs.append(f'卡牌:{v}')
+        del self.achievements[ach_id]
+        return msgs, None
 
     def _get_quest_progress(self, qid):
         qd = next(q for q in QUEST_DEFINITIONS if q['id'] == qid)

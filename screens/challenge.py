@@ -156,12 +156,15 @@ class ChallengeScreen(Screen):
         self._pts_lbl.text = f'分: {pts}'
 
     def _select_all(self, theme_id):
+        self._selected_factors.clear()
+        exclusives_seen = set()
         for f in CHALLENGE_FACTORS:
-            if f.get('theme') != theme_id:
-                continue
+            if f.get('theme') != theme_id: continue
             pre = f.get('prereq')
-            if pre and pre.startswith('__'):
-                continue
+            if pre and pre.startswith('__'): continue
+            exc = f.get('exclusive')
+            if exc and exc in exclusives_seen: continue
+            if exc: exclusives_seen.add(exc)
             self._selected_factors.add(f['id'])
         pts = sum(f['points'] for f in CHALLENGE_FACTORS if f['id'] in self._selected_factors)
         self._pts_lbl.text = f'分: {pts}'

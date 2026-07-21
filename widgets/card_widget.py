@@ -43,9 +43,18 @@ class CardWidget(ButtonBehavior, BoxLayout):
                          text_size=(self.width - dp(10), None), shorten=True)
         traits = c.traits
         star_str = '★' * getattr(c, 'star', 1)
+        fav = '☆ ' if getattr(c, 'favorite', False) else ''
         bl = getattr(c, 'bloodline', '')
         bl_str = f'[{bl}]' if bl else ''
-        info = f'{star_str}{bl_str} HP:{traits.get("health","?")} ATK:{traits.get("attack","?")}'
+        bt = getattr(c, 'base_traits', {}) or c.traits
+        ft = c.traits
+        atk_b, atk_f = bt.get('attack', 0), ft.get('attack', 0)
+        hp_b, hp_f = bt.get('health', 0), ft.get('health', 0)
+        dif_atk = atk_f - atk_b
+        dif_hp = hp_f - hp_b
+        ac = (1, 0.4, 0.3, 1) if dif_atk > 0 else ((0.3, 1, 0.3, 1) if dif_atk < 0 else (0.8, 0.8, 0.8, 1))
+        hc = (1, 0.4, 0.3, 1) if dif_hp > 0 else ((0.3, 1, 0.3, 1) if dif_hp < 0 else (0.8, 0.8, 0.8, 1))
+        info = f'{fav}{star_str}{bl_str} ATK:{atk_b}/{atk_f} HP:{hp_b}/{hp_f}'
         info_lbl = Label(text=info, size_hint_y=0.25, color=(0.8, 0.8, 0.8, 1),
                          halign='left', text_size=(self.width - dp(10), None))
         extra = []

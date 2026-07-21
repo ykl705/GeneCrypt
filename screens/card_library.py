@@ -49,7 +49,8 @@ class CardLibraryScreen(Screen):
         game = app.game
         self._count_lbl.text = f'卡牌: {len(game.cards)}/{game.effective_max_cards}'
         self._card_list.clear_widgets()
-        for card in game.cards:
+        cards = sorted(game.cards, key=lambda c: (not getattr(c, 'favorite', False), c.name))
+        for card in cards:
             cw = CardWidget(card=card)
             cw.bind(on_release=lambda _, c=card: self._on_card_select(c))
             self._card_list.add_widget(cw)
@@ -97,11 +98,16 @@ class CardLibraryScreen(Screen):
             self._action_bar.add_widget(star_btn)
             train_btn = Button(text='训练', on_press=lambda _: self._train_card(c))
             self._action_bar.add_widget(train_btn)
+            equip_btn = Button(text='装备', on_press=lambda _: self._show_equipment(c))
+            self._action_bar.add_widget(equip_btn)
         clone_btn = Button(text='克隆', on_press=lambda _: self._clone_card(c))
         self._action_bar.add_widget(clone_btn)
+        fav_text = '★取消收藏' if getattr(c, 'favorite', False) else '☆收藏'
+        fav_btn = Button(text=fav_text, on_press=lambda _: self._toggle_favorite(c))
+        self._action_bar.add_widget(fav_btn)
         report_btn = Button(text='基因报告', on_press=lambda _: self._show_report(c))
         self._action_bar.add_widget(report_btn)
-        delete_btn = Button(text='删除', on_press=lambda _: self._delete_card(c))
+        delete_btn = Button(text='删除', on_press=lambda _: self._del_card_check(c))
         delete_btn.background_color = (0.8, 0.2, 0.2, 1)
         self._action_bar.add_widget(delete_btn)
         if c.is_alive:
@@ -154,12 +160,42 @@ class CardLibraryScreen(Screen):
         app.game.save_game()
 
     def _delete_card(self, card):
+        if getattr(card, 'favorite', False):
+            popup = Popup(title='错误', content=Label(text='无法删除收藏卡牌，请先取消收藏'),
+                          size_hint=(0.5, 0.25))
+            popup.open()
+            return
         app = App.get_running_app()
         app.game.cards.remove(card)
         app.game.save_game()
         self._selected_card = None
         app.refresh_breeding_combos()
         self._refresh()
+
+    def _del_card_check(self, card):
+        self._delete_card(card)
+
+    def _toggle_favorite(self, card):
+        card.favorite = not getattr(card, 'favorite', False)
+        App.get_running_app().game.save_game()
+        self._show_detail(card)
+        self._refresh()
+
+    def _show_equipment(self, card):
+        from screens.equipment import EquipmentScreen
+        app = App.get_running_app()
+        content = BoxLayout(orientation='vertical', spacing=dp(5), padding=dp(10))
+        es = EquipmentScreen(name='tmp_equip')
+        es._card = card
+        es._refresh()
+        for child in es.children[:]:
+            es.remove_widget(child)
+            content.add_widget(child)
+        close_btn = Button(text='关闭', size_hint_y=None, height=dp(36))
+        content.add_widget(close_btn)
+        popup = Popup(title=f'{card.name} - 装备', content=content, size_hint=(0.8, 0.8))
+        close_btn.bind(on_press=popup.dismiss)
+        popup.open()
 
     def _mutate_card(self, card):
         from kivy.uix.textinput import TextInput

@@ -72,13 +72,7 @@ class StatsScreen(Screen):
         self._section('成就')
         done = sum(1 for a in ACHIEVEMENTS if a['id'] in game.achievements)
         total = len(ACHIEVEMENTS)
-        self._line(f'  完成: {done}/{total}')
-        for a in ACHIEVEMENTS:
-            is_done = a['id'] in game.achievements
-            name = a['name'] if a['type'] != 'hidden' or is_done else '???'
-            icon = '✓' if is_done else '○'
-            diff_stars = '★' * a.get('diff', 1)
-            self._line(f'  {icon} {name} [{diff_stars}]', color=(0.4, 1, 0.4, 1) if is_done else (0.4, 0.4, 0.4, 1))
+        self._line(f'  完成: {done}/{total} - 请到"成就"页面查看详情', color=(0.4, 1, 0.4, 1))
 
         self._section('挑战记录')
         if game.challenge_scores:
