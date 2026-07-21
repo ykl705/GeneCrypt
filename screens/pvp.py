@@ -105,54 +105,45 @@ class PvPScreen(Screen):
         except ValueError as e:
             self._result_lbl.text = f'代码错误: {e}'
             return
-        result = self._sim_battle(team_a, team_b)
-        self._result_lbl.text = result
-
-    def _sim_battle(self, team_a, team_b):
+        app = App.get_running_app()
+        bs = app._screen_refs.get('战斗')
+        if bs is None:
+            return
         from gene_game import Card, BattleSystem
-        def _make_team(tm):
-            cards = []
-            for pos, t in sorted(tm.items()):
-                c = Card(f'单位{pos}', random.choice(['male','female']))
+        import random
+        def _build_cards(tm):
+            cards = {}
+            for pos, t in tm.items():
+                c = Card(f'PvP-{pos}', random.choice(['male','female']))
                 c.star = t.get('star', 1)
-                c.traits['attack'] = 40 + c.star * 25
-                c.traits['health'] = 150 + c.star * 80
-                c.traits['defense'] = 15 + c.star * 8
-                c.traits['speed'] = 8 + c.star * 5
+                c.traits['attack'] = 45 + c.star * 30
+                c.traits['health'] = 180 + c.star * 100
+                c.traits['defense'] = 18 + c.star * 10
+                c.traits['speed'] = 10 + c.star * 6
                 c.traits['critical_rate'] = 5
                 c.traits['dodge_rate'] = 5
-                c.traits['stamina'] = 50
                 c.skills = t.get('skills', [])
-                cards.append(c)
+                cards[pos] = c
             return cards
-
-        a_cards = _make_team(team_a)
-        b_cards = _make_team(team_b)
-        b_stats = {'total_hp': sum(c.traits['health'] for c in b_cards),
-                   'avg_atk': sum(c.traits['attack'] for c in b_cards)//max(1,len(b_cards)),
-                   'avg_def': sum(c.traits['defense'] for c in b_cards)//max(1,len(b_cards)),
-                   'avg_spd': sum(c.traits['speed'] for c in b_cards)//max(1,len(b_cards)),
-                   'all_skills': sum((c.skills for c in b_cards), [])}
-
-        enemy_data = [{'name': f'B队', 'health': b_stats['total_hp'],
-                       'attack': b_stats['avg_atk'], 'defense': b_stats['avg_def'],
-                       'speed': b_stats['avg_spd'], 'skills': b_stats['all_skills'][:6],
-                       'passive_abilities': [], 'width': 1, 'height': 1, 'position': 0}]
-
-        my_grid = {i: c for i, c in enumerate(a_cards[:5])}
-        bs = BattleSystem(my_grid, enemy_data, stage_num=1, skill_enhance_level=0)
-        bs.is_running = True
-        ticks = 0
-        while ticks < 300:
-            bs.update_action_bars_frame()
-            bs.update_status_damage()
-            if bs.check_winner(): break
-            unit = bs.get_next_unit()
-            if unit:
-                targets = [e for e in bs.enemies if e.is_alive]
-                bs.execute_turn(unit, targets if targets else None)
-            ticks += 1
-        el = bs.winner
-        if el == 'player':
-            return f'A队胜利! ({ticks}回合)'
-        return f'B队胜利! ({ticks}回合)'
+        my_cards = _build_cards(team_a)
+        opp_cards = _build_cards(team_b)
+        enemy_data = []
+        for pos, c in opp_cards.items():
+            enemy_data.append({
+                'name': f'对手{pos}', 'health': c.traits['health'],
+                'attack': c.traits['attack'], 'defense': c.traits['defense'],
+                'speed': c.traits['speed'], 'skills': c.skills,
+                'passive_abilities': [], 'width': 1, 'height': 1, 'position': pos,
+            })
+        bsystem = BattleSystem(my_cards, enemy_data, stage_num=1, skill_enhance_level=0)
+        bsystem.is_running = True
+        bs._battle_system = bsystem
+        bs._battle_running = True
+        bs._selected_stage = 1
+        bs._render_battle_grid()
+        bs.add_log('[PvP] 对决开始!')
+        Clock.schedule_interval(bs._battle_tick, 0.3)
+        for tab in app.root.tab_list:
+            if tab.text == '战斗':
+                app.root.switch_to(tab)
+                break

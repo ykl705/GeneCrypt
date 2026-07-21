@@ -374,7 +374,7 @@ class BattleScreen(Screen):
         self._unit_cells[boss.id] = boss_cell
 
         def _do_place(*a):
-            if wrap.width <= 0 or wrap.height <= 0:
+            if wrap.width <= 20 or wrap.height <= 20:
                 return
             ew = (wrap.width - spacing * (gs - 1)) / gs
             eh = (wrap.height - spacing * (gs - 1)) / gs
@@ -382,7 +382,7 @@ class BattleScreen(Screen):
             boss_cell.size = (w * ew + (w - 1) * spacing, h * eh + (h - 1) * spacing)
 
         wrap.bind(size=lambda *a: _do_place(*a))
-        _do_place()
+        Clock.schedule_once(lambda dt: _do_place(), 0)
 
     def _make_cell(self, unit, is_player):
         from kivy.graphics import Color as GfxColor, Rectangle
