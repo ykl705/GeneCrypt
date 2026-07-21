@@ -6,7 +6,7 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.popup import Popup
 from kivy.app import App
 from kivy.metrics import dp
-from gene_config import EQUIPMENT_SLOTS, EQUIPMENT_SLOT_NAMES, EQUIPMENT_RARITY, SET_BONUSES
+from gene_config import EQUIPMENT_SLOTS, EQUIPMENT_SLOT_NAMES, EQUIPMENT_RARITY, SET_BONUSES, AFFIX_CODE_NAMES
 import os
 
 
@@ -68,6 +68,13 @@ class EquipmentScreen(Screen):
         self._refresh()
 
     def _refresh(self):
+        try:
+            self._refresh_impl()
+        except Exception as e:
+            Popup(title='错误', content=Label(text=f'装备页面错误:\n{str(e)[:200]}'),
+                  size_hint=(0.7, 0.4)).open()
+
+    def _refresh_impl(self):
         self._slot_box.clear_widgets()
         self._inv_box.clear_widgets()
         app = App.get_running_app()
@@ -89,7 +96,7 @@ class EquipmentScreen(Screen):
                     from kivy.uix.image import Image as KivyImg
                     row.add_widget(KivyImg(source=img_path, size_hint_x=None, width=dp(28)))
                 row.add_widget(Label(text=txt, color=clr, size_hint_x=0.7))
-                btn = Button(text='卸下', size_hint_x=0.3, on_press=lambda _, s=slot: self._unequip(s))
+                btn = Button(text='卸下', size_hint_x=0.3, on_press=lambda _, s=slot: self._safe_unequip(s))
                 row.add_widget(btn)
                 self._slot_box.add_widget(row)
             else:
@@ -98,6 +105,8 @@ class EquipmentScreen(Screen):
             self._slot_box.add_widget(btn)
 
         for inv_id, inv_entry in app.game.equipment_inventory.items():
+            if isinstance(inv_entry, int):
+                continue
             if inv_entry.get('count', 0) <= 0: continue
             item = inv_entry.get('data', {})
             slot = item.get('slot', inv_id.split('_')[0])
@@ -112,13 +121,28 @@ class EquipmentScreen(Screen):
                 from kivy.uix.image import Image as KivyImg
                 row.add_widget(KivyImg(source=img_path, size_hint_x=None, width=dp(28)))
             row.add_widget(Label(text=txt, color=rinfo['color'], size_hint_x=0.55))
-            btn = Button(text='装备', size_hint_x=0.25,
-                         on_press=lambda _, i=inv_id: self._equip(i))
-            info_btn = Button(text='?', size_hint_x=0.1,
+            btn = Button(text='装备', size_hint_x=0.2,
+                         on_press=lambda _, i=inv_id: self._safe_equip(i))
+            info_btn = Button(text='?', size_hint_x=0.08,
                                on_press=lambda _, i=inv_id: self._show_item_detail(i))
+            row.add_widget(btn)
             row.add_widget(info_btn)
             row.add_widget(btn)
             self._inv_box.add_widget(row)
+
+    def _safe_equip(self, item_id):
+        try:
+            self._equip(item_id)
+        except Exception as e:
+            Popup(title='错误', content=Label(text=f'装备失败:\n{str(e)[:200]}'),
+                  size_hint=(0.7, 0.4)).open()
+
+    def _safe_unequip(self, slot):
+        try:
+            self._unequip(slot)
+        except Exception as e:
+            Popup(title='错误', content=Label(text=f'卸装备失败:\n{str(e)[:200]}'),
+                  size_hint=(0.7, 0.4)).open()
 
     def _equip(self, item_id):
         app = App.get_running_app()
@@ -133,22 +157,29 @@ class EquipmentScreen(Screen):
         self._refresh()
 
     def _show_item_detail(self, inv_id):
-        app = App.get_running_app()
-        inv_entry = app.game.equipment_inventory.get(inv_id)
-        if not inv_entry:
-            return
-        item = inv_entry.get('data', {})
-        rarity = item.get('rarity', 'common')
-        rinfo = next((r for r in EQUIPMENT_RARITY if r['id'] == rarity), {'name':'?','color':(0.5,0.5,0.5,1)})
-        lines = [f'{item.get("name", "?")}']
-        lines.append(f'稀有度: {rinfo["name"]}')
-        from gene_config import EQUIPMENT_SLOT_NAMES
-        lines.append(f'部位: {EQUIPMENT_SLOT_NAMES.get(item.get("slot",""),"?")}')
-        lines.append('--- 词条 ---')
-        for aff in item.get('affixes', []):
-            v = aff['value']
-            s = '%' if aff.get('is_pct') else ''
-            lines.append(f'  {aff["code"]}: +{v}{s}')
-        popup = Popup(title='装备详情', content=Label(text='\n'.join(lines)),
-                      size_hint=(0.6, 0.5))
-        popup.open()
+        try:
+            app = App.get_running_app()
+            inv_entry = app.game.equipment_inventory.get(inv_id)
+            if not inv_entry:
+                return
+            if isinstance(inv_entry, int):
+                return
+            item = inv_entry.get('data', {})
+            rarity = item.get('rarity', 'common')
+            rinfo = next((r for r in EQUIPMENT_RARITY if r['id'] == rarity), {'name':'?','color':(0.5,0.5,0.5,1)})
+            lines = [item.get('name', '?')]
+            lines.append(f'稀有度: {rinfo["name"]}')
+            lines.append(f'部位: {EQUIPMENT_SLOT_NAMES.get(item.get("slot",""),"?")}')
+            lines.append('--- 词条 ---')
+            for aff in item.get('affixes', []):
+                code = aff.get('code', '?')
+                cname = AFFIX_CODE_NAMES.get(code, code)
+                v = aff['value']
+                s = '%' if aff.get('is_pct') else ''
+                lines.append(f'  {cname}: +{v}{s}')
+            popup = Popup(title='装备详情', content=Label(text='\n'.join(lines)),
+                          size_hint=(0.6, 0.5))
+            popup.open()
+        except Exception as e:
+            Popup(title='错误', content=Label(text=f'详情错误:\n{str(e)[:200]}'),
+                  size_hint=(0.7, 0.4)).open()

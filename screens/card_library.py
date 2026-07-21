@@ -182,20 +182,128 @@ class CardLibraryScreen(Screen):
         self._refresh()
 
     def _show_equipment(self, card):
-        from screens.equipment import EquipmentScreen
+        try:
+            from screens.equipment import EquipmentScreen
+            content = BoxLayout(orientation='vertical', spacing=dp(5), padding=dp(10))
+            sv = ScrollView(size_hint_y=1)
+            inner = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(3))
+            inner.bind(minimum_height=inner.setter('height'))
+            self._eq_card = card
+            self._fill_equipment_ui(inner)
+            sv.add_widget(inner)
+            content.add_widget(sv)
+            close_btn = Button(text='关闭', size_hint_y=None, height=dp(36))
+            content.add_widget(close_btn)
+            popup = Popup(title=f'{card.name} - 装备', content=content, size_hint=(0.85, 0.8))
+            close_btn.bind(on_press=lambda _: (popup.dismiss(), self._show_detail(self._eq_card)))
+            popup.open()
+        except Exception as e:
+            import traceback
+            Popup(title='错误', content=Label(text=f'装备页错误:\n{str(e)[:200]}'),
+                  size_hint=(0.7, 0.4)).open()
+
+    def _fill_equipment_ui(self, inner):
+        card = self._eq_card
         app = App.get_running_app()
-        content = BoxLayout(orientation='vertical', spacing=dp(5), padding=dp(10))
-        es = EquipmentScreen(name='tmp_equip')
-        es._card = card
-        es._refresh()
-        for child in es.children[:]:
-            es.remove_widget(child)
-            content.add_widget(child)
-        close_btn = Button(text='关闭', size_hint_y=None, height=dp(36))
-        content.add_widget(close_btn)
-        popup = Popup(title=f'{card.name} - 装备', content=content, size_hint=(0.8, 0.8))
-        close_btn.bind(on_press=popup.dismiss)
-        popup.open()
+        from gene_config import EQUIPMENT_SLOTS, EQUIPMENT_SLOT_NAMES, EQUIPMENT_RARITY, AFFIX_CODE_NAMES
+        import os
+        inner.add_widget(Label(text='[装备槽]', size_hint_y=None, height=dp(22), bold=True, color=(0.8,0.8,0.8,1)))
+        for slot in EQUIPMENT_SLOTS:
+            item = card.equipment.get(slot)
+            sname = EQUIPMENT_SLOT_NAMES.get(slot, slot)
+            if item:
+                name = item.get('name', '?')
+                rarity = item.get('rarity', 'common')
+                rinfo = next((r for r in EQUIPMENT_RARITY if r['id'] == rarity), {'color':(0.6,1,0.6,1)})
+                txt = f'[{sname}] {name}'
+                row = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(32), spacing=dp(4))
+                img_path = os.path.join('assets', 'equipment', f'{slot}_{rarity}.png')
+                if os.path.exists(img_path):
+                    from kivy.uix.image import Image as KivyImg
+                    row.add_widget(KivyImg(source=img_path, size_hint_x=None, width=dp(24)))
+                row.add_widget(Label(text=txt, color=rinfo['color'], size_hint_x=0.7))
+                row.add_widget(Button(text='卸', size_hint_x=0.15, on_press=lambda _, s=slot: self._do_unequip(s)))
+                inner.add_widget(row)
+            else:
+                inner.add_widget(Label(text=f'[{sname}] 空', color=(0.4,0.4,0.4,1),
+                                        size_hint_y=None, height=dp(24)))
+        inner.add_widget(Label(text='', size_hint_y=None, height=dp(4)))
+        inner.add_widget(Label(text='[库存装备]', size_hint_y=None, height=dp(22), bold=True, color=(0.8,0.8,0.8,1)))
+        for inv_id, inv_entry in app.game.equipment_inventory.items():
+            if isinstance(inv_entry, int): continue
+            if inv_entry.get('count', 0) <= 0: continue
+            item = inv_entry.get('data', {})
+            slot = item.get('slot', '?')
+            rarity = item.get('rarity', 'common')
+            rinfo = next((r for r in EQUIPMENT_RARITY if r['id'] == rarity), {'name':'?','color':(0.5,0.5,0.5,1)})
+            name = item.get('name', '?')
+            row = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(32), spacing=dp(4))
+            img_path = os.path.join('assets', 'equipment', f'{slot}_{rarity}.png')
+            if os.path.exists(img_path):
+                from kivy.uix.image import Image as KivyImg
+                row.add_widget(KivyImg(source=img_path, size_hint_x=None, width=dp(24)))
+            row.add_widget(Label(text=f'[{rinfo["name"]}] {name}', color=rinfo['color'], size_hint_x=0.55))
+            row.add_widget(Button(text='装', size_hint_x=0.12, on_press=lambda _, i=inv_id: self._do_equip(i)))
+            detail_btn = Button(text='?', size_hint_x=0.08)
+            detail_btn.bind(on_press=lambda _, i=inv_id: self._show_eq_detail(i))
+            row.add_widget(detail_btn)
+            inner.add_widget(row)
+
+    def _do_equip(self, inv_id):
+        card = self._eq_card
+        app = App.get_running_app()
+        try:
+            app.game.equip_item(card, inv_id)
+            app.game.save_game()
+        except Exception as e:
+            import traceback
+            Popup(title='错误', content=Label(text=str(e)), size_hint=(0.5,0.25)).open()
+            return
+        self._refresh_eq_popup()
+
+    def _do_unequip(self, slot):
+        card = self._eq_card
+        app = App.get_running_app()
+        try:
+            app.game.unequip_item(card, slot)
+            app.game.save_game()
+        except Exception as e:
+            Popup(title='错误', content=Label(text=str(e)), size_hint=(0.5,0.25)).open()
+            return
+        self._refresh_eq_popup()
+
+    def _refresh_eq_popup(self):
+        if not hasattr(self, '_eq_popup') or not self._eq_popup:
+            return
+        content = self._eq_popup.content
+        children = [c for c in content.children if isinstance(c, ScrollView)]
+        if children:
+            sv = children[0]
+            if sv.children:
+                inner = sv.children[0]
+                if inner:
+                    inner.clear_widgets()
+                    self._fill_equipment_ui(inner)
+
+    def _show_eq_detail(self, inv_id):
+        app = App.get_running_app()
+        inv_entry = app.game.equipment_inventory.get(inv_id)
+        if not inv_entry or isinstance(inv_entry, int): return
+        item = inv_entry.get('data', {})
+        rarity = item.get('rarity', 'common')
+        rinfo = next((r for r in EQUIPMENT_RARITY if r['id'] == rarity), {'name':'?','color':(0.5,0.5,0.5,1)})
+        lines = [item.get('name', '?')]
+        lines.append(f'稀有度: {rinfo["name"]}')
+        from gene_config import EQUIPMENT_SLOT_NAMES, AFFIX_CODE_NAMES
+        lines.append(f'部位: {EQUIPMENT_SLOT_NAMES.get(item.get("slot",""),"?")}')
+        lines.append('--- 词条 ---')
+        for aff in item.get('affixes', []):
+            code = aff.get('code', '?')
+            cname = AFFIX_CODE_NAMES.get(code, code)
+            v = aff['value']
+            s = '%' if aff.get('is_pct') else ''
+            lines.append(f'  {cname}: +{v}{s}')
+        Popup(title='装备详情', content=Label(text='\n'.join(lines)), size_hint=(0.6, 0.5)).open()
 
     def _mutate_card(self, card):
         from kivy.uix.textinput import TextInput
