@@ -60,6 +60,21 @@ class DebugConsole(Screen):
         row5.add_widget(Button(text='全模组x3', on_press=lambda _: self._fill_modules()))
         inner.add_widget(row5)
 
+        inner.add_widget(Label(text='生成装备', size_hint_y=None, height=dp(22), color=(1,0.85,0,1)))
+        row6 = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(36), spacing=dp(4))
+        self._eq_slot = TextInput(text='weapon', multiline=False, size_hint_x=0.25, hint_text='部位')
+        row6.add_widget(self._eq_slot)
+        self._eq_rarity = TextInput(text='legend', multiline=False, size_hint_x=0.25, hint_text='稀有度')
+        row6.add_widget(self._eq_rarity)
+        self._eq_count = TextInput(text='1', multiline=False, size_hint_x=0.15, hint_text='数量')
+        row6.add_widget(self._eq_count)
+        row6.add_widget(Button(text='生成', size_hint_x=0.2, on_press=lambda _: self._gen_equip()))
+        inner.add_widget(row6)
+        inner.add_widget(Label(text='部位:weapon/head/body/accessory/boots/special', font_size=dp(9),
+                               size_hint_y=None, height=dp(16), color=(0.5,0.5,0.5,1)))
+        inner.add_widget(Label(text='稀有度:common/uncommon/rare/epic/legend/ancient/mythic/chaos', font_size=dp(9),
+                               size_hint_y=None, height=dp(16), color=(0.5,0.5,0.5,1)))
+
         sv.add_widget(inner)
         main.add_widget(sv)
         self.add_widget(main)
@@ -156,6 +171,31 @@ class DebugConsole(Screen):
             game.module_inventory[mid] = game.module_inventory.get(mid, 0) + 3
         game.save_game()
         self._pop('模组+3')
+
+    def _gen_equip(self):
+        slot = self._eq_slot.text.strip() or 'weapon'
+        rarity = self._eq_rarity.text.strip() or 'common'
+        try: count = int(self._eq_count.text or 1)
+        except: count = 1
+        game = self._get_game()
+        from gene_config import EQUIPMENT_SLOTS, EQUIPMENT_RARITY, EQUIPMENT_AFFIX_POOLS, EQUIPMENT_SLOT_NAMES, EQUIPMENT_NAMES
+        chosen = next((r for r in EQUIPMENT_RARITY if r['id'] == rarity), EQUIPMENT_RARITY[0])
+        pool = EQUIPMENT_AFFIX_POOLS.get(rarity, EQUIPMENT_AFFIX_POOLS['common'])
+        min_a, max_a = chosen['affixes']
+        for _ in range(count):
+            n_a = __import__('random').randint(min_a, min(max_a, len(pool)))
+            picked = __import__('random').sample(pool, min(n_a, len(pool)))
+            affixes = [{'code': c, 'stat': s, 'value': __import__('random').randint(lo, hi), 'is_pct': bool(ip)}
+                       for c, s, ip, lo, hi in picked]
+            iid = f'{slot}_{rarity}_{__import__("random").randint(1000,9999)}'
+            name_pool = EQUIPMENT_NAMES.get(slot, {}).get(rarity, [f'{chosen["prefix"]}{EQUIPMENT_SLOT_NAMES.get(slot,slot)}'])
+            real_name = __import__('random').choice(name_pool)
+            item = {'id': iid, 'slot': slot, 'rarity': rarity, 'name': real_name, 'affixes': affixes}
+            if iid not in game.equipment_inventory:
+                game.equipment_inventory[iid] = {'data': item, 'count': 0}
+            game.equipment_inventory[iid]['count'] += 1
+        game.save_game()
+        self._pop(f'生成{count}件 {real_name}')
 
     def _pop(self, msg):
         popup = Popup(title='控制台', content=Label(text=msg), size_hint=(0.5, 0.25))

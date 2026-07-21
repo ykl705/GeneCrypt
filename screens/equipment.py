@@ -113,7 +113,10 @@ class EquipmentScreen(Screen):
                 row.add_widget(KivyImg(source=img_path, size_hint_x=None, width=dp(28)))
             row.add_widget(Label(text=txt, color=rinfo['color'], size_hint_x=0.55))
             btn = Button(text='装备', size_hint_x=0.25,
-                         on_press=lambda _, iid=inv_id: self._equip(iid))
+                         on_press=lambda _, i=inv_id: self._equip(i))
+            info_btn = Button(text='?', size_hint_x=0.1,
+                               on_press=lambda _, i=inv_id: self._show_item_detail(i))
+            row.add_widget(info_btn)
             row.add_widget(btn)
             self._inv_box.add_widget(row)
 
@@ -128,3 +131,24 @@ class EquipmentScreen(Screen):
         app.game.unequip_item(self._card, slot)
         app.game.save_game()
         self._refresh()
+
+    def _show_item_detail(self, inv_id):
+        app = App.get_running_app()
+        inv_entry = app.game.equipment_inventory.get(inv_id)
+        if not inv_entry:
+            return
+        item = inv_entry.get('data', {})
+        rarity = item.get('rarity', 'common')
+        rinfo = next((r for r in EQUIPMENT_RARITY if r['id'] == rarity), {'name':'?','color':(0.5,0.5,0.5,1)})
+        lines = [f'{item.get("name", "?")}']
+        lines.append(f'稀有度: {rinfo["name"]}')
+        from gene_config import EQUIPMENT_SLOT_NAMES
+        lines.append(f'部位: {EQUIPMENT_SLOT_NAMES.get(item.get("slot",""),"?")}')
+        lines.append('--- 词条 ---')
+        for aff in item.get('affixes', []):
+            v = aff['value']
+            s = '%' if aff.get('is_pct') else ''
+            lines.append(f'  {aff["code"]}: +{v}{s}')
+        popup = Popup(title='装备详情', content=Label(text='\n'.join(lines)),
+                      size_hint=(0.6, 0.5))
+        popup.open()

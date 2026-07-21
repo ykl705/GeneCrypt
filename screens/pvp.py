@@ -148,7 +148,9 @@ class PvPScreen(Screen):
             bs.update_status_damage()
             if bs.check_winner(): break
             unit = bs.get_next_unit()
-            if unit: bs.execute_turn(unit, None)
+            if unit:
+                targets = [e for e in bs.enemies if e.is_alive]
+                bs.execute_turn(unit, targets if targets else None)
             ticks += 1
         el = bs.winner
         if el == 'player':

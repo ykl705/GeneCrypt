@@ -1593,7 +1593,10 @@ class Game:
         slot = item['slot']
         old = card.equipment.get(slot)
         if old:
-            self.equipment_inventory[old['id']] = self.equipment_inventory.get(old['id'], 0) + 1
+            oid = old['id']
+            if oid not in self.equipment_inventory:
+                self.equipment_inventory[oid] = {'data': old, 'count': 0}
+            self.equipment_inventory[oid]['count'] += 1
         card.equipment[slot] = item
         card.traits = card.calculate_traits()
         return True, "装备成功"
