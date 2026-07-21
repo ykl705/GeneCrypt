@@ -549,6 +549,8 @@ class Card:
         if eq:
             import random as _rnd
             for slot, item in eq.items():
+                if not isinstance(item, dict):
+                    continue
                 affixes = item.get('affixes', [])
                 for aff in affixes:
                     stat = aff.get('stat', '')
@@ -1584,9 +1586,9 @@ class Game:
 
     def equip_item(self, card, item_id):
         inv_entry = self.equipment_inventory.get(item_id)
-        if not inv_entry or inv_entry.get('count', 0) <= 0:
+        if not inv_entry or isinstance(inv_entry, int) or inv_entry.get('count', 0) <= 0:
             return False, "装备不存在"
-        item = dict(inv_entry['data'])
+        item = dict(inv_entry.get('data', {}))
         inv_entry['count'] -= 1
         if inv_entry['count'] <= 0:
             del self.equipment_inventory[item_id]
@@ -2283,6 +2285,12 @@ class Game:
             for card in self.cards:
                 if card.is_alive:
                     card.traits = card.calculate_traits()
+            for card in self.cards:
+                eq = getattr(card, 'equipment', None)
+                if eq and isinstance(eq, dict):
+                    for k, v in list(eq.items()):
+                        if isinstance(v, str):
+                            del card.equipment[k]
             return True
         except Exception as e:
             print(f"加载失败: {e}")

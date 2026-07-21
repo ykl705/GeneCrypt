@@ -211,7 +211,7 @@ class CardLibraryScreen(Screen):
         for slot in EQUIPMENT_SLOTS:
             item = card.equipment.get(slot)
             sname = EQUIPMENT_SLOT_NAMES.get(slot, slot)
-            if item:
+            if item and isinstance(item, dict):
                 name = item.get('name', '?')
                 rarity = item.get('rarity', 'common')
                 rinfo = next((r for r in EQUIPMENT_RARITY if r['id'] == rarity), {'color':(0.6,1,0.6,1)})
