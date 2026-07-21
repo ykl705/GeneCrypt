@@ -1562,10 +1562,10 @@ class Game:
                 chosen_rarity = r
                 break
         slot = random.choice(EQUIPMENT_SLOTS)
-        pool = EQUIPMENT_AFFIX_POOLS.get(chosen_rarity['id'], EQUIPMENT_AFFIX_POOLS['common'])
+        pool = EQUIPMENT_AFFIX_POOLS.get(chosen_rarity['id']) or EQUIPMENT_AFFIX_POOLS.get('epic', EQUIPMENT_AFFIX_POOLS.get('common', []))
         min_a, max_a = chosen_rarity['affixes']
         n_affixes = random.randint(min_a, min(max_a, len(pool)))
-        picked = random.sample(pool, min(n_affixes, len(pool)))
+        picked = random.sample(pool, n_affixes)
         affixes = []
         for code, stat_key, is_pct, lo, hi in picked:
             val = random.randint(lo, hi)

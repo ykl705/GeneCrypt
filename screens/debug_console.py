@@ -208,10 +208,10 @@ class DebugConsole(Screen):
         import random
         from gene_config import EQUIPMENT_RARITY, EQUIPMENT_AFFIX_POOLS, EQUIPMENT_SLOT_NAMES, EQUIPMENT_NAMES
         chosen = next((r for r in EQUIPMENT_RARITY if r['id'] == rarity), EQUIPMENT_RARITY[0])
-        pool = EQUIPMENT_AFFIX_POOLS.get(rarity, EQUIPMENT_AFFIX_POOLS.get('common', []))
+        pool = EQUIPMENT_AFFIX_POOLS.get(rarity) or EQUIPMENT_AFFIX_POOLS.get('epic', EQUIPMENT_AFFIX_POOLS.get('common', []))
         min_a, max_a = chosen['affixes']
-        n_a = random.randint(min_a, min(max_a, max(1, len(pool))))
-        picked = random.sample(pool, min(n_a, len(pool)))
+        n_a = random.randint(min_a, min(max_a, len(pool)))
+        picked = random.sample(pool, n_a)
         affixes = [{'code': c, 'stat': s, 'value': random.randint(lo, hi), 'is_pct': bool(ip)}
                    for c, s, ip, lo, hi in picked]
         iid = f'{slot}_{rarity}_{random.randint(1000,9999)}'
