@@ -457,6 +457,15 @@ class BattleScreen(Screen):
         bar1.bind(pos=self._update_bar, size=self._update_bar)
         cell.add_widget(bar1)
 
+        bar_sh = BoxLayout(size_hint_y=0.03, spacing=dp(0))
+        cell._shield_bar = bar_sh
+        with bar_sh.canvas.before:
+            GfxColor(0.3, 0.5, 1, 1)
+            bar_sh._fill = Rectangle(pos=bar_sh.pos, size=(0, bar_sh.height))
+        bar_sh.bind(pos=self._update_bar, size=lambda i,v: self._update_shield_bar(i))
+        bar_sh._unit = unit
+        cell.add_widget(bar_sh)
+
         row3 = BoxLayout(orientation='horizontal', size_hint_y=0.14, spacing=dp(2))
         d = unit.defense if hasattr(unit, 'defense') else 0
         row3.add_widget(Label(text=f'DEF{d}', color=(0.5, 0.7, 1, 1),
@@ -518,6 +527,22 @@ class BattleScreen(Screen):
                 return False
             bs.update_action_bars_frame()
             bs.update_status_damage()
+            for unit in bs._all_units_cache:
+                if not unit.is_alive: continue
+                se = unit.status_effects
+                if 'poison' in se:
+                    cell = self._unit_cells.get(unit.id)
+                    if cell:
+                        stacks = se['poison'].get('stacks', 1)
+                        self._float_text(f'☠{stacks}', (0.7, 0.2, 1, 1), cell, 0.6)
+                elif 'burn' in se:
+                    cell = self._unit_cells.get(unit.id)
+                    if cell:
+                        self._float_text('🔥', (1, 0.5, 0, 1), cell, 0.5)
+                elif 'bleed' in se:
+                    cell = self._unit_cells.get(unit.id)
+                    if cell:
+                        self._float_text('🩸', (1, 0.2, 0.2, 1), cell, 0.5)
             bs.process_enemy_passives()
             bs.cleanup_summons()
             if bs.check_winner():
@@ -546,8 +571,13 @@ class BattleScreen(Screen):
                         result = bs.execute_turn(unit, [target])
                         self._flash_attack(unit, target)
                         if result:
+                            typ = result.get('type', 'attack')
+                            skill = result.get('skill', '')
                             dmg = result.get('damage', 0)
-                            self.add_log(f'{unit.name} -> {target.name} {dmg}伤害')
+                            if typ == 'skill' and skill:
+                                self.add_log(f'{unit.name} 释放 [{skill}] → {target.name} {dmg}伤害')
+                            else:
+                                self.add_log(f'{unit.name} 攻击 → {target.name} {dmg}伤害')
                             if not target.is_alive:
                                 self.add_log(f'{target.name} 被击败!')
                 else:
@@ -555,7 +585,7 @@ class BattleScreen(Screen):
                     if result:
                         dmg = result.get('damage', 0)
                         tname = result.get('target', '?')
-                        self.add_log(f'{unit.name} -> {tname} {dmg}伤害')
+                        self.add_log(f'{unit.name} → {tname} {dmg}伤害')
 
             self._update_all_cells()
         except Exception as e:
@@ -571,6 +601,31 @@ class BattleScreen(Screen):
         if tgt_cell:
             tgt_cell.opacity = 0.4
             Clock.schedule_once(lambda dt: setattr(tgt_cell, 'opacity', 1.0), 0.16)
+            dmg = max(1, attacker.attack - target.defense)
+            self._float_text(f'-{dmg}', (1, 0.3, 0.3, 1), tgt_cell)
+
+    def _float_text(self, txt, color, target_cell, duration=0.8):
+        lbl = Label(text=txt, color=color, font_size=dp(13), bold=True,
+                    size_hint=(None, None), size=(dp(60), dp(24)),
+                    pos=(target_cell.pos[0] + dp(5), target_cell.pos[1] + dp(30)))
+        parent = target_cell.parent
+        if parent:
+            parent.add_widget(lbl)
+            def _anim(dt):
+                lbl.y += dp(6)
+                lbl.opacity = max(0, lbl.opacity - 0.12)
+            event = Clock.schedule_interval(_anim, 0.05)
+            Clock.schedule_once(lambda dt: (event.cancel(), parent.remove_widget(lbl)), duration)
+
+    def _update_shield_bar(self, instance):
+        if hasattr(instance, '_fill') and hasattr(instance, '_unit'):
+            unit = instance._unit
+            if unit and unit.shield > 0:
+                pct = unit.shield / max(unit.max_health, 1)
+                instance._fill.size = (instance.width * min(pct, 0.5), instance.height)
+                instance._fill.pos = instance.pos
+            else:
+                instance._fill.size = (0, instance.height)
 
     def _update_all_cells(self):
         bs = self._battle_system
@@ -613,6 +668,9 @@ class BattleScreen(Screen):
                     fill.size = (bw * ab, bar.height)
             if not unit.is_alive:
                 cell.opacity = 0.3
+            if hasattr(cell, '_shield_bar') and cell._shield_bar:
+                cell._shield_bar._unit = unit
+                self._update_shield_bar(cell._shield_bar)
 
     def _toggle_auto(self):
         if self._battle_system:

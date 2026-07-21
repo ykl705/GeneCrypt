@@ -196,6 +196,8 @@ class CardLibraryScreen(Screen):
             content.add_widget(close_btn)
             popup = Popup(title=f'{card.name} - 装备', content=content, size_hint=(0.85, 0.8))
             close_btn.bind(on_press=lambda _: (popup.dismiss(), self._show_detail(self._eq_card)))
+            self._eq_popup = popup
+            self._eq_inner = inner
             popup.open()
         except Exception as e:
             import traceback
@@ -273,19 +275,12 @@ class CardLibraryScreen(Screen):
         self._refresh_eq_popup()
 
     def _refresh_eq_popup(self):
-        if not hasattr(self, '_eq_popup') or not self._eq_popup:
-            return
-        content = self._eq_popup.content
-        children = [c for c in content.children if isinstance(c, ScrollView)]
-        if children:
-            sv = children[0]
-            if sv.children:
-                inner = sv.children[0]
-                if inner:
-                    inner.clear_widgets()
-                    self._fill_equipment_ui(inner)
+        if hasattr(self, '_eq_inner') and self._eq_inner:
+            self._eq_inner.clear_widgets()
+            self._fill_equipment_ui(self._eq_inner)
 
     def _show_eq_detail(self, inv_id):
+        from gene_config import EQUIPMENT_RARITY, EQUIPMENT_SLOT_NAMES, AFFIX_CODE_NAMES
         app = App.get_running_app()
         inv_entry = app.game.equipment_inventory.get(inv_id)
         if not inv_entry or isinstance(inv_entry, int): return
