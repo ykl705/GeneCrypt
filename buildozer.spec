@@ -10,7 +10,7 @@ source.exclude_patterns = *.md,*.zip,*.log,gene_game_desktop.py
 version = 0.1.1
 
 # 精简依赖，避免版本冲突
-requirements = python3,kivy,pillow,filetype
+requirements = python3,kivy,pillow,filetype,requests
 
 orientation = landscape
 fullscreen = 0

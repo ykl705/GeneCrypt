@@ -827,6 +827,12 @@ class Game:
         self.pity_counters = {pid: 0 for pid in self.GACHA_POOLS}
         self.battle_materials = 0
         self.no_loss_stages = set()
+        self.cloud_sync = None
+        try:
+            from services.cloud_save import CloudSave
+            self.cloud_sync = CloudSave()
+        except:
+            pass
         self.quest_progress = {}
         self.quest_completed = set()
         self.quest_claimed = set()
@@ -2219,6 +2225,9 @@ class Game:
             with open(tmp, 'w', encoding='utf-8') as f:
                 json.dump(save_data, f, ensure_ascii=False, indent=2)
             os.replace(tmp, self.SAVE_FILE)
+            if self.cloud_sync and self.cloud_sync.should_sync():
+                self.cloud_sync.upload(save_data)
+                self.cloud_sync.mark_dirty()
             return True
         except Exception as e:
             print(f"保存失败: {e}")

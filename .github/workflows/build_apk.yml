@@ -36,6 +36,12 @@ jobs:
             -O assets/fonts/NotoSansCJKsc-Regular.otf
           ls -lh assets/fonts/
 
+      - name: Inject cloud save config
+        run: |
+          echo 'GITHUB_TOKEN = "${{ secrets.CLOUD_SAVE_TOKEN }}"' > services/cloud_config.py
+          echo 'REPO_OWNER = "ykl705"' >> services/cloud_config.py
+          echo 'REPO_NAME = "GeneCrypt-Saves"' >> services/cloud_config.py
+
       - name: Verify Python version
         run: python --version
 

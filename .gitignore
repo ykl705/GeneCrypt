@@ -5,7 +5,10 @@ __pycache__/
 *.log
 .buildozer/
 bin/
+*.log
 *.apk
+cloud_user.txt
+device_id.txt
 venv/
 .venv/
 nul
