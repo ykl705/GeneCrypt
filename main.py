@@ -2,7 +2,6 @@
 import os
 import sys
 import traceback
-import json
 
 # ========== 日志 ==========
 LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'app.log')
@@ -29,16 +28,12 @@ except Exception as e:
 # ========== Kivy 导入 ==========
 try:
     from kivy.app import App
-from kivy.uix.tabbedpanel import TabbedPanel, TabbedPanelHeader
-from kivy.core.window import Window
-from kivy.clock import Clock
-from kivy.metrics import dp
-from kivy.lang import Builder
-from kivy.utils import platform
-from kivy.uix.textinput import TextInput
-from kivy.uix.popup import Popup
-from kivy.uix.boxlayout import BoxLayout
-from kivy.uix.button import Button
+    from kivy.uix.tabbedpanel import TabbedPanel, TabbedPanelHeader
+    from kivy.core.window import Window
+    from kivy.clock import Clock
+    from kivy.metrics import dp
+    from kivy.lang import Builder
+    from kivy.utils import platform
     from kivy.core.text import LabelBase, DEFAULT_FONT
 except Exception as e:
     log_error(f'Kivy imports error: {e}\n{traceback.format_exc()}')
@@ -177,11 +172,6 @@ class GeneCryptApp(App):
         # 定时保存
         Clock.schedule_interval(lambda dt: self._auto_save(), 30)
         Clock.schedule_interval(lambda dt: self._update_breeding(), 0.5)
-        Clock.schedule_interval(lambda dt: self._cloud_sync_tick(), 300)
-        
-        cs = self.game.cloud_sync if self.game else None
-        if cs and not cs.is_logged_in():
-            Clock.schedule_once(lambda dt: self.show_cloud_login(), 1)
         
         log_error('App.build() complete')
         return tp
@@ -240,76 +230,6 @@ class GeneCryptApp(App):
                 btn.bind(on_press=popup.dismiss)
                 popup.open()
     
-    def _cloud_sync_tick(self):
-        try:
-            if self.game and self.game.cloud_sync:
-                if self.game.cloud_sync.should_sync():
-                    self.game.cloud_sync.mark_dirty()
-                    self.game.save_game()
-        except Exception:
-            pass
-
-    def show_cloud_login(self):
-        content = BoxLayout(orientation='vertical', spacing=dp(8), padding=dp(10))
-        content.add_widget(Label(text='云端存档登录', size_hint_y=None, height=dp(28), bold=True))
-        name_input = TextInput(text='', multiline=False, size_hint_y=None, height=dp(36),
-                               hint_text='输入用户名')
-        content.add_widget(name_input)
-        status_lbl = Label(text='', size_hint_y=None, height=dp(24))
-        content.add_widget(status_lbl)
-        btn_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(40), spacing=dp(8))
-        def _do_login(_):
-            username = name_input.text.strip()
-            if not username:
-                status_lbl.text = '请输入用户名'; return
-            cs = self.game.cloud_sync if self.game else None
-            if not cs:
-                status_lbl.text = '云服务不可用'; return
-            cs.login(username, callback=lambda r: self._on_login_result(r, popup))
-        def _do_register(_):
-            username = name_input.text.strip()
-            if not username:
-                status_lbl.text = '请输入用户名'; return
-            cs = self.game.cloud_sync if self.game else None
-            if not cs:
-                status_lbl.text = '云服务不可用'; return
-            cs.register(username, callback=lambda r: self._on_login_result(r, popup))
-        btn_row.add_widget(Button(text='登录', on_press=_do_login))
-        btn_row.add_widget(Button(text='注册', on_press=_do_register))
-        content.add_widget(btn_row)
-        popup = Popup(title='云端同步', content=content, size_hint=(0.75, 0.45))
-        popup.open()
-
-    def _on_login_result(self, result, popup):
-        success = result[0]
-        msg = result[1]
-        from kivy.uix.popup import Popup
-        if success:
-            popup.dismiss()
-            if len(result) > 2 and result[2]:
-                data = result[2]
-                save = data.get('save')
-                if save and self.game:
-                    try:
-                        json_str = json.dumps(save, ensure_ascii=False)
-                        tmp = self.game.SAVE_FILE + '.tmp'
-                        with open(tmp, 'w', encoding='utf-8') as f:
-                            f.write(json_str)
-                        os.replace(tmp, self.game.SAVE_FILE)
-                        self.game.load_game()
-                        for name, screen in self._screen_refs.items():
-                            if hasattr(screen, 'on_enter'):
-                                screen.on_enter()
-                        Popup(title='成功', content=Label(text='云端存档已恢复!'),
-                              size_hint=(0.5,0.25)).open()
-                    except Exception as e:
-                        Popup(title='错误', content=Label(text=str(e)), size_hint=(0.5,0.25)).open()
-            else:
-                Popup(title='成功', content=Label(text=msg), size_hint=(0.5,0.25)).open()
-        else:
-            from kivy.uix.label import Label
-            Popup(title='失败', content=Label(text=msg), size_hint=(0.5,0.25)).open()
-
     def on_pause(self):
         try:
             if self.game:
