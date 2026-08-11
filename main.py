@@ -2,6 +2,7 @@
 import os
 import sys
 import traceback
+import json
 
 # ========== 日志 ==========
 LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'app.log')
@@ -172,9 +173,84 @@ class GeneCryptApp(App):
         # 定时保存
         Clock.schedule_interval(lambda dt: self._auto_save(), 30)
         Clock.schedule_interval(lambda dt: self._update_breeding(), 0.5)
+        Clock.schedule_interval(lambda dt: self._cloud_tick(), 300)
         
         log_error('App.build() complete')
         return tp
+
+    def _cloud_tick(self):
+        try:
+            from services.cloud_save import CloudSave
+            cs = CloudSave()
+            if not cs.is_logged_in():
+                return
+            path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'gene_game_save.json')
+            if not os.path.exists(path):
+                return
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            cs.upload(data)
+        except:
+            pass
+
+    def show_cloud_login(self, *args):
+        from kivy.uix.textinput import TextInput
+        from kivy.uix.popup import Popup
+        from kivy.uix.boxlayout import BoxLayout
+        content = BoxLayout(orientation='vertical', spacing=dp(8), padding=dp(10))
+        content.add_widget(Label(text='云端存档', size_hint_y=None, height=dp(28), bold=True))
+        name_input = TextInput(text='', multiline=False, size_hint_y=None, height=dp(36),
+                               hint_text='输入用户名')
+        content.add_widget(name_input)
+        status_lbl = Label(text='', size_hint_y=None, height=dp(24))
+        content.add_widget(status_lbl)
+        btn_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(40), spacing=dp(8))
+        def _do_login(_):
+            username = name_input.text.strip()
+            if not username:
+                status_lbl.text = '请输入用户名'; return
+            from services.cloud_save import CloudSave
+            cs = CloudSave()
+            cs.login(username, callback=lambda r: self._on_cloud_result(r, popup, status_lbl))
+            status_lbl.text = '登录中...'
+        def _do_register(_):
+            username = name_input.text.strip()
+            if not username:
+                status_lbl.text = '请输入用户名'; return
+            from services.cloud_save import CloudSave
+            cs = CloudSave()
+            cs.register(username, callback=lambda r: self._on_cloud_result(r, popup, status_lbl))
+            status_lbl.text = '注册中...'
+        btn_row.add_widget(Button(text='登录', on_press=_do_login))
+        btn_row.add_widget(Button(text='注册', on_press=_do_register))
+        content.add_widget(btn_row)
+        popup = Popup(title='云端同步', content=content, size_hint=(0.75, 0.45))
+        popup.open()
+
+    def _on_cloud_result(self, result, popup, lbl):
+        from kivy.uix.popup import Popup
+        from kivy.uix.label import Label
+        success = result[0]
+        msg = result[1]
+        if success:
+            popup.dismiss()
+            if len(result) > 2 and result[2]:
+                save = result[2].get('save')
+                if save:
+                    try:
+                        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'gene_game_save.json')
+                        with open(path, 'w', encoding='utf-8') as f:
+                            json.dump(save, f, ensure_ascii=False)
+                        self.game.load_game()
+                        for n, s in self._screen_refs.items():
+                            if hasattr(s, 'on_enter'): s.on_enter()
+                        Popup(title='成功', content=Label(text='云端存档已恢复!'), size_hint=(0.5,0.25)).open()
+                    except Exception as e:
+                        Popup(title='错误', content=Label(text=str(e)), size_hint=(0.5,0.25)).open()
+            else:
+                Popup(title='成功', content=Label(text=msg), size_hint=(0.5,0.25)).open()
+        else:
+            lbl.text = msg
     
     def _load_kv_files(self):
         kv_files = [
