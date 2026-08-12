@@ -155,18 +155,25 @@ class GeneCryptApp(App):
         self._screen_refs = {}
         for tab_name, screen_cls in screens:
             screen = screen_cls(name=tab_name.lower().replace(' ', '_'))
-            screen.game = self.game  # 注入游戏实例
+            screen.game = self.game
             self._screen_refs[tab_name] = screen
             
             header = TabbedPanelHeader(text=tab_name)
             header.content = screen
             tp.add_widget(header)
         
+        cloud_header = TabbedPanelHeader(text='☁云端')
+        cloud_header.content = Label(text='云端存档\n点击登录/注册', halign='center',
+                                      color=(0.5, 0.9, 1, 1))
+        tp.add_widget(cloud_header)
+        
         def _on_tab_change(instance, value):
             for tab in tp.tab_list:
                 content = tab.content
                 if tab == tp.current_tab and hasattr(content, 'on_enter'):
                     content.on_enter()
+            if tp.current_tab and tp.current_tab.text == '☁云端':
+                Clock.schedule_once(lambda dt: self.show_cloud_login(), 0.1)
         
         tp.bind(current_tab=_on_tab_change)
         
