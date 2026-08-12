@@ -202,9 +202,17 @@ class GeneCryptApp(App):
             pass
 
     def show_cloud_login(self, *args):
+        try:
+            self._show_cloud_login_impl()
+        except Exception as e:
+            log_error(f'cloud login error: {e}')
+
+    def _show_cloud_login_impl(self):
         from kivy.uix.textinput import TextInput
         from kivy.uix.popup import Popup
         from kivy.uix.boxlayout import BoxLayout
+        from kivy.uix.button import Button
+        from kivy.uix.label import Label
         content = BoxLayout(orientation='vertical', spacing=dp(8), padding=dp(10))
         content.add_widget(Label(text='云端存档', size_hint_y=None, height=dp(28), bold=True))
         name_input = TextInput(text='', multiline=False, size_hint_y=None, height=dp(36),
