@@ -9,17 +9,18 @@ except ImportError:
 from services.cloud_config import GITHUB_TOKEN, REPO_OWNER, REPO_NAME
 from services.device_id import get_device_id
 
-try:
-    from services.cloud_config import GITHUB_TOKEN, REPO_OWNER, REPO_NAME
-except (ImportError, ModuleNotFoundError):
-    GITHUB_TOKEN = ""
-    REPO_OWNER = ""
-    REPO_NAME = ""
-
 API_BASE = f"https://api.github.com/repos/{REPO_OWNER}/{REPO_NAME}"
 HEADERS = {
     "Authorization": f"token {GITHUB_TOKEN}",
     "Accept": "application/vnd.github.v3+json"
+}
+
+_ERROR_MESSAGES = {
+    400: "请求格式错误",
+    401: "Token 无效",
+    403: "无权限访问存档仓库",
+    404: "存档仓库不存在",
+    422: "数据校验失败",
 }
 
 
@@ -58,25 +59,57 @@ class CloudSave:
     def is_logged_in(self):
         return self._username is not None and len(self._username) > 0
 
+    def _ensure_repo(self):
+        try:
+            resp = requests.post(
+                "https://api.github.com/user/repos",
+                headers=HEADERS,
+                json={"name": REPO_NAME, "private": False, "auto_init": True},
+                timeout=10)
+            return resp.status_code in [201, 422]
+        except:
+            return False
+
+    def _put_file(self, username, data):
+        url = f"{API_BASE}/contents/players/{username}.json"
+        sha = self._github_sha(url)
+        content = base64.b64encode(json.dumps(data, ensure_ascii=False).encode()).decode()
+        payload = {"message": f"{username} sync {time.strftime('%H:%M:%S')}",
+                   "content": content}
+        if sha:
+            payload["sha"] = sha
+        return requests.put(url, headers=HEADERS, json=payload, timeout=10)
+
     def register(self, username, callback=None):
         """Register device to username. Callback(result) called on UI thread."""
         def _do():
             if not requests:
                 return self._cb(callback, (False, "网络库不可用"))
             data = {"uuid": self._device_id, "username": username, "registered_at": time.time()}
-            url = f"{API_BASE}/contents/players/{username}.json"
-            sha = self._github_sha(url)
-            content = base64.b64encode(json.dumps(data, ensure_ascii=False).encode()).decode()
-            payload = {"message": f"{username} register", "content": content}
-            if sha:
-                payload["sha"] = sha
-            resp = requests.put(url, headers=HEADERS, json=payload, timeout=10)
+            try:
+                resp = self._put_file(username, data)
+            except:
+                return self._cb(callback, (False, "网络连接失败，请检查网络"))
             if resp.status_code in [200, 201]:
                 self._username = username
                 self._save_local_username()
                 self._cb(callback, (True, "注册成功"))
-            else:
-                self._cb(callback, (False, f"注册失败: {resp.status_code}"))
+                return
+            if resp.status_code == 404:
+                if self._ensure_repo():
+                    try:
+                        resp = self._put_file(username, data)
+                    except:
+                        return self._cb(callback, (False, "网络连接失败"))
+                    if resp.status_code in [200, 201]:
+                        self._username = username
+                        self._save_local_username()
+                        self._cb(callback, (True, "注册成功"))
+                        return
+                self._cb(callback, (False, "存档仓库创建失败"))
+                return
+            msg = _ERROR_MESSAGES.get(resp.status_code, f"注册失败({resp.status_code})")
+            self._cb(callback, (False, msg))
         threading.Thread(target=_do, daemon=True).start()
 
     def login(self, username, callback=None):
@@ -85,18 +118,19 @@ class CloudSave:
             if not requests:
                 return self._cb(callback, (False, "网络库不可用"))
             url = f"{API_BASE}/contents/players/{username}.json"
-            resp = requests.get(url, headers=HEADERS, timeout=10)
+            try:
+                resp = requests.get(url, headers=HEADERS, timeout=10)
+            except:
+                return self._cb(callback, (False, "网络连接失败"))
             if resp.status_code != 200:
-                return self._cb(callback, (False, f"账号不存在: {resp.status_code}"))
+                msg = _ERROR_MESSAGES.get(resp.status_code, f"登录失败({resp.status_code})")
+                if resp.status_code == 404:
+                    msg = "账号不存在"
+                return self._cb(callback, (False, msg))
             try:
                 data = json.loads(base64.b64decode(resp.json()["content"]).decode())
             except:
                 return self._cb(callback, (False, "数据解析失败"))
-            if data.get("uuid") != self._device_id:
-                self._username = username
-                self._save_local_username()
-                self._cb(callback, (True, "登录成功", data))
-                return
             self._username = username
             self._save_local_username()
             self._cb(callback, (True, "登录成功", data))
@@ -108,22 +142,19 @@ class CloudSave:
             return
         self._syncing = True
         def _do():
-            url = f"{API_BASE}/contents/players/{self._username}.json"
-            sha = self._github_sha(url)
             data = {"uuid": self._device_id, "username": self._username,
                     "save": save_data, "last_sync": time.time()}
-            content = base64.b64encode(json.dumps(data, ensure_ascii=False).encode()).decode()
-            payload = {"message": f"{self._username} sync {time.strftime('%H:%M:%S')}",
-                       "content": content}
-            if sha:
-                payload["sha"] = sha
-            resp = requests.put(url, headers=HEADERS, json=payload, timeout=10)
+            try:
+                resp = self._put_file(self._username, data)
+            except:
+                self._syncing = False
+                return self._cb(callback, (False, "网络连接失败"))
             if resp.status_code in [200, 201]:
                 self._dirty = False
                 self._last_sync = time.time()
                 self._cb(callback, (True, "同步成功"))
             else:
-                self._cb(callback, (False, f"同步失败:{resp.status_code}"))
+                self._cb(callback, (False, _ERROR_MESSAGES.get(resp.status_code, f"同步失败({resp.status_code})")))
             self._syncing = False
         threading.Thread(target=_do, daemon=True).start()
 
@@ -133,7 +164,10 @@ class CloudSave:
             return self._cb(callback, (False, None))
         def _do():
             url = f"{API_BASE}/contents/players/{self._username}.json"
-            resp = requests.get(url, headers=HEADERS, timeout=10)
+            try:
+                resp = requests.get(url, headers=HEADERS, timeout=10)
+            except:
+                return self._cb(callback, (False, None))
             if resp.status_code != 200:
                 return self._cb(callback, (False, None))
             try:
