@@ -30,6 +30,7 @@ except Exception as e:
 try:
     from kivy.app import App
     from kivy.uix.tabbedpanel import TabbedPanel, TabbedPanelHeader
+    from kivy.uix.label import Label
     from kivy.core.window import Window
     from kivy.clock import Clock
     from kivy.metrics import dp
