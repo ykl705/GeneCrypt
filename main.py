@@ -365,26 +365,37 @@ class GeneCryptApp(App):
 
     def _manual_sync(self):
         from services.cloud_save import CloudSave
+        from kivy.uix.popup import Popup
         cs = CloudSave()
-        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'gene_game_save.json')
-        if os.path.exists(path):
-            try:
-                with open(path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                cs.upload(data, callback=lambda r: self._sync_result(r))
-            except:
-                pass
+        if not cs.is_logged_in():
+            Popup(title='同步', content=Label(text='未登录'), size_hint=(0.5, 0.25)).open()
+            return
+        path = getattr(self.game, 'SAVE_FILE', '') if self.game else ''
+        if not path or not os.path.exists(path):
+            Popup(title='同步', content=Label(text='本地存档不存在'), size_hint=(0.5, 0.25)).open()
+            return
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            cs.upload(data, callback=lambda r: self._sync_result(r))
+            Popup(title='同步', content=Label(text='正在上传...'), size_hint=(0.5, 0.25)).open()
+        except Exception as e:
+            Popup(title='同步', content=Label(text=f'失败: {e}'), size_hint=(0.5, 0.25)).open()
 
     def _sync_result(self, result):
         from kivy.uix.popup import Popup
         Popup(title='同步', content=Label(text=result[1]), size_hint=(0.5, 0.25)).open()
 
     def _switch_account(self):
-        from services.cloud_save import CloudSave
-        from services.account import set_last_username
-        cs = CloudSave()
-        cs.logout()
-        self._show_login_panel()
+        try:
+            from services.cloud_save import CloudSave
+            cs = CloudSave()
+            cs.logout()
+            self._show_login_panel()
+        except Exception as e:
+            log_error(f'switch account error: {e}')
+            from kivy.uix.popup import Popup
+            Popup(title='错误', content=Label(text=str(e)), size_hint=(0.5, 0.25)).open()
 
     def _check_update(self):
         try:
@@ -433,8 +444,8 @@ class GeneCryptApp(App):
             cs = CloudSave()
             if not cs.is_logged_in():
                 return
-            path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'gene_game_save.json')
-            if not os.path.exists(path):
+            path = getattr(self.game, 'SAVE_FILE', '') if self.game else ''
+            if not path or not os.path.exists(path):
                 return
             with open(path, 'r', encoding='utf-8') as f:
                 data = json.load(f)

@@ -24,7 +24,8 @@ def save_profile(profile):
 
 
 def get_last_username():
-    return load_profile().get('last_username', '')
+    u = load_profile().get('last_username', '')
+    return u or ''
 
 
 def set_last_username(username):
