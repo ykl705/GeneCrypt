@@ -33,6 +33,7 @@ try:
     from kivy.uix.label import Label
     from kivy.uix.button import Button
     from kivy.uix.boxlayout import BoxLayout
+    from kivy.uix.floatlayout import FloatLayout
     from kivy.uix.textinput import TextInput
     from kivy.uix.popup import Popup
     from kivy.core.window import Window
@@ -133,13 +134,17 @@ class GeneCryptApp(App):
         
         self._load_kv_files()
         
-        root = BoxLayout(orientation='vertical')
+        root = FloatLayout()
         self._main_panel = self._build_main_panel()
         self._login_panel = self._build_login_panel()
+        self._main_panel.size_hint = (1, 1)
+        self._login_panel.size_hint = (1, 1)
         root.add_widget(self._main_panel)
         root.add_widget(self._login_panel)
         self._main_panel.opacity = 0
         self._main_panel.disabled = True
+        self._login_panel.opacity = 1
+        self._login_panel.disabled = False
         
         Clock.schedule_once(lambda dt: self._check_update(), 2)
         
