@@ -334,12 +334,14 @@ class GeneCryptApp(App):
             self._login_status.text = msg
 
     def _show_main_panel(self):
+        if self._login_panel.parent is not None:
+            self._login_panel.parent.remove_widget(self._login_panel)
         self._main_panel.opacity = 1
         self._main_panel.disabled = False
-        self._login_panel.opacity = 0
-        self._login_panel.disabled = True
 
     def _show_login_panel(self):
+        if self._login_panel.parent is None and self._main_panel.parent is not None:
+            self._main_panel.parent.add_widget(self._login_panel)
         self._main_panel.opacity = 0
         self._main_panel.disabled = True
         self._login_panel.opacity = 1
