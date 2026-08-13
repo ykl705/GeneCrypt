@@ -236,10 +236,10 @@ class GeneCryptApp(App):
         last_user = get_last_username()
         self._login_username = TextInput(text=last_user, multiline=False,
                                           size_hint_y=None, height=dp(44),
-                                          hint_text='用户名', keyboard_mode='managed')
+                                          hint_text='用户名')
         self._login_password = TextInput(text='', multiline=False, password=True,
                                           size_hint_y=None, height=dp(44),
-                                          hint_text='密码', keyboard_mode='managed')
+                                          hint_text='密码')
         self._login_status = Label(text='', size_hint_y=None, height=dp(24), color=(1, 0.5, 0.5, 1))
         box.add_widget(Label(text='用户名:', size_hint_y=None, height=dp(20)))
         box.add_widget(self._login_username)
@@ -268,23 +268,20 @@ class GeneCryptApp(App):
 
     def _show_register(self):
         from kivy.uix.popup import Popup
+        from kivy.uix.scrollview import ScrollView
         content = BoxLayout(orientation='vertical', spacing=dp(8), padding=dp(10))
         content.add_widget(Label(text='注册新账号', size_hint_y=None, height=dp(24), bold=True))
-        u_input = TextInput(text='', multiline=False, size_hint_y=None, height=dp(40), hint_text='用户名',
-                            keyboard_mode='managed')
-        p_input = TextInput(text='', multiline=False, password=True, size_hint_y=None, height=dp(40), hint_text='密码(至少4位)',
-                            keyboard_mode='managed')
-        p2_input = TextInput(text='', multiline=False, password=True, size_hint_y=None, height=dp(40), hint_text='确认密码',
-                             keyboard_mode='managed')
-        n_input = TextInput(text='', multiline=False, size_hint_y=None, height=dp(40), hint_text='昵称(可选)',
-                            keyboard_mode='managed')
+        u_input = TextInput(text='', multiline=False, size_hint_y=None, height=dp(40), hint_text='用户名')
+        p_input = TextInput(text='', multiline=False, password=True, size_hint_y=None, height=dp(40), hint_text='密码(至少4位)')
+        p2_input = TextInput(text='', multiline=False, password=True, size_hint_y=None, height=dp(40), hint_text='确认密码')
+        n_input = TextInput(text='', multiline=False, size_hint_y=None, height=dp(40), hint_text='昵称(可选)')
         status_lbl = Label(text='', size_hint_y=None, height=dp(22), color=(1, 0.5, 0.5, 1))
         content.add_widget(u_input)
         content.add_widget(p_input)
         content.add_widget(p2_input)
         content.add_widget(n_input)
         content.add_widget(status_lbl)
-        popup = Popup(title='注册', content=content, size_hint=(0.8, 0.6))
+        popup = Popup(title='注册', content=content, size_hint=(0.85, 0.75))
         def _do_register(_):
             uname = u_input.text.strip()
             pw = p_input.text
@@ -301,7 +298,6 @@ class GeneCryptApp(App):
         btn = Button(text='确认注册', size_hint_y=None, height=dp(40), on_press=_do_register)
         content.add_widget(btn)
         popup.open()
-        Clock.schedule_once(lambda dt: setattr(u_input, 'focus', True), 0.5)
 
     def _on_register_result(self, result, popup, status_lbl):
         success, msg = result[0], result[1]
