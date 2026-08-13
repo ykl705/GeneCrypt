@@ -1948,6 +1948,42 @@ class Game:
             if qid not in self.quest_progress:
                 self.quest_progress[qid] = 0
 
+    def set_account(self, username):
+        base_dir = os.path.dirname(self.SAVE_FILE) if os.path.dirname(self.SAVE_FILE) else '.'
+        if username:
+            self.SAVE_FILE = os.path.join(base_dir, f'gene_game_save_{username}.json')
+        else:
+            self.SAVE_FILE = os.path.join(base_dir, 'gene_game_save.json')
+
+    def reset_game_state(self):
+        self.cards = []
+        self.breeding_queue = []
+        self.tech_tree = self._copy_tech_tree()
+        self.breed_speed_multiplier = 1.0
+        self.auto_breeding = False
+        self.unlocked_stages = list(range(1, 31))
+        self.max_stage = 30
+        self.gacha_currency = 0
+        self.pity_counters = {pid: 0 for pid in self.GACHA_POOLS}
+        self.battle_materials = 0
+        self.no_loss_stages = set()
+        self.quest_progress = {}
+        self.quest_completed = set()
+        self.quest_claimed = set()
+        self.enemy_kills = {}
+        self.breed_counter = 0
+        self.gene_essence = 0
+        self.chip_inventory = {}
+        self.module_inventory = {}
+        self.challenge_scores = {}
+        self.achievements = {}
+        self.equipment_inventory = {}
+        self.base_buildings = {}
+        self.gene_library = {}
+        self._sync_tech_effects()
+        self.create_initial_cards()
+        self._init_quests()
+
     def _grant_achievement_reward(self, ach_id):
         from gene_config import ACHIEVEMENTS, BLOODLINES
         ach = next((a for a in ACHIEVEMENTS if a['id'] == ach_id), None)

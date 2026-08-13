@@ -296,6 +296,7 @@ class GeneCryptApp(App):
                 status_lbl.text = '请填写用户名和密码'; return
             if pw != pw2:
                 status_lbl.text = '两次密码不一致'; return
+            self._pending_username = uname
             from services.cloud_save import CloudSave
             cs = CloudSave()
             cs.register(uname, pw, nick, callback=lambda r: self._on_register_result(r, popup, status_lbl))
@@ -308,8 +309,13 @@ class GeneCryptApp(App):
         success, msg = result[0], result[1]
         if success:
             popup.dismiss()
+            username = getattr(self, '_pending_username', '')
+            if username and self.game:
+                self.game.set_account(username)
+                self.game.reset_game_state()
             self._show_main_panel()
             self._refresh_account_tab()
+            self._refresh_all_screens()
         else:
             status_lbl.text = msg
 
@@ -318,20 +324,39 @@ class GeneCryptApp(App):
         msg = result[1]
         if success:
             self._login_status.text = ''
+            username = self._login_username.text.strip()
+            if username and self.game:
+                self.game.set_account(username)
             if len(result) > 2 and result[2]:
                 save = result[2].get('save')
                 if save:
                     try:
-                        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'gene_game_save.json')
+                        path = self.game.SAVE_FILE
                         with open(path, 'w', encoding='utf-8') as f:
                             json.dump(save, f, ensure_ascii=False)
                         self.game.load_game()
                     except:
                         pass
+                else:
+                    if self.game:
+                        self.game.reset_game_state()
+            else:
+                if self.game:
+                    self.game.reset_game_state()
             self._show_main_panel()
             self._refresh_account_tab()
+            self._refresh_all_screens()
         else:
             self._login_status.text = msg
+
+    def _refresh_all_screens(self):
+        for name, screen in self._screen_refs.items():
+            screen.game = self.game
+            if hasattr(screen, 'on_enter'):
+                try:
+                    screen.on_enter()
+                except:
+                    pass
 
     def _show_main_panel(self):
         if self._login_panel.parent is not None:
