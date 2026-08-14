@@ -112,18 +112,25 @@ class GachaScreen(Screen):
     def _do_pull(self, pid, count):
         app = App.get_running_app()
         result = app.game.gacha_pull(pid, count)
-        if result.get('success'):
-            cards = result.get('cards', [])
+        cards, msg = (None, None)
+        if isinstance(result, tuple):
+            cards, msg = result
+        if cards is not None:
+            self._result_list.clear_widgets()
             for card in cards:
                 from widgets.card_widget import CardWidget
+                rarity = getattr(card, '_rarity', 'normal')
                 cw = CardWidget(card=card)
                 cw.height = dp(60)
                 self._result_list.add_widget(cw)
+                self._result_list.add_widget(Label(text=f'[{rarity.upper()}] {card.name}',
+                                                    color=(1, 0.8, 0.2, 1) if rarity != 'normal' else (0.8, 0.8, 0.8, 1),
+                                                    size_hint_y=None, height=dp(18)))
             self._refresh()
             app.game.save_game()
             app.refresh_breeding_combos()
         else:
             from kivy.uix.popup import Popup
-            popup = Popup(title='抽卡失败', content=Label(text=result.get('msg', '未知错误')),
+            popup = Popup(title='抽卡失败', content=Label(text=msg or '未知错误'),
                           size_hint=(0.5, 0.3))
             popup.open()

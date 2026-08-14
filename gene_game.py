@@ -2126,6 +2126,45 @@ class Game:
                     newly.append({'id': aid, 'title': f'[成就] {newly_ach["name"]}', 'rewards': [{'type': 'achievement', 'ach_id': aid}]})
         return newly
 
+    def submit_card_for_quest(self, qid, card):
+        qd = next((q for q in QUEST_DEFINITIONS if q['id'] == qid), None)
+        if not qd or qd['type'] != 'submit_card':
+            return False, '任务不存在'
+        if not self._is_quest_unlocked(qid):
+            return False, '前置任务未完成'
+        if qid in self.quest_completed or qid in self.quest_claimed:
+            return False, '任务已完成'
+        if self.quest_progress.get(qid, 0) >= qd['target']:
+            return False, '任务已完成'
+        reqs = qd.get('requirements', {})
+        t = card.traits
+        if reqs.get('min_atk', 0) > t.get('attack', 0):
+            return False, f"攻击力不达标（需要{reqs['min_atk']}，当前{t.get('attack', 0)}）"
+        if reqs.get('min_hp', 0) > t.get('health', 0):
+            return False, f"生命值不达标（需要{reqs['min_hp']}，当前{t.get('health', 0)}）"
+        if reqs.get('min_def', 0) > t.get('defense', 0):
+            return False, f"防御力不达标（需要{reqs['min_def']}，当前{t.get('defense', 0)}）"
+        if reqs.get('min_spd', 0) > t.get('speed', 0):
+            return False, f"速度不达标（需要{reqs['min_spd']}，当前{t.get('speed', 0)}）"
+        self.quest_progress[qid] = 1
+        self._check_quest(qid)
+        return True, f'已提交 [{card.name}] 完成任务 [{qd["title"]}]'
+
+    def get_active_submit_quests(self):
+        active = []
+        for qd in QUEST_DEFINITIONS:
+            if qd['type'] != 'submit_card':
+                continue
+            qid = qd['id']
+            if not self._is_quest_unlocked(qid):
+                continue
+            if qid in self.quest_completed or qid in self.quest_claimed:
+                continue
+            if self.quest_progress.get(qid, 0) >= qd['target']:
+                continue
+            active.append(qd)
+        return active
+
     def claim_quest(self, qid):
         if qid not in self.quest_completed or qid in self.quest_claimed:
             return None, "任务未完成或已领取"

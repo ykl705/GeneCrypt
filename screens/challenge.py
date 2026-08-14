@@ -206,6 +206,7 @@ class ChallengeScreen(Screen):
         battle_screen._battle_system = bs
         battle_screen._battle_running = True
         battle_screen._selected_stage = stage_num
+        battle_screen._battle_mode = 'challenge'
         battle_screen._render_battle_grid()
         pts = sum(f['points'] for f in CHALLENGE_FACTORS if f['id'] in self._selected_factors)
         battle_screen.add_log(f'[挑战] 主题:{theme_info["name"] if theme_info else "?"} 积分:{pts}')

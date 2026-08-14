@@ -151,6 +151,8 @@ class DungeonScreen(Screen):
             bs._battle_system = bs2
             bs._battle_running = True
             bs._selected_stage = dung['unlock']
+            bs._battle_mode = 'dungeon'
+            bs._challenge_info = None
             bs._render_battle_grid()
             bs.add_log(f'[副本] {dung["name"]}')
             from kivy.clock import Clock
@@ -171,6 +173,8 @@ class DungeonScreen(Screen):
             bs._battle_system = bs2
             bs._battle_running = True
             bs._selected_stage = dung['unlock']
+            bs._battle_mode = 'dungeon'
+            bs._challenge_info = None
             bs._render_battle_grid()
             bs.add_log(f'[副本BOSS] {room["boss"]}!')
             from kivy.clock import Clock

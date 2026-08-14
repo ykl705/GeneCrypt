@@ -140,6 +140,8 @@ class PvPScreen(Screen):
         bs._battle_system = bsystem
         bs._battle_running = True
         bs._selected_stage = 1
+        bs._battle_mode = 'pvp'
+        bs._challenge_info = None
         bs._render_battle_grid()
         bs.add_log('[PvP] 对决开始!')
         Clock.schedule_interval(bs._battle_tick, 0.3)

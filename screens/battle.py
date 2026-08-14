@@ -60,6 +60,7 @@ class BattleScreen(Screen):
         self._selected_stage = 1
         self._team = {}
         self._pending_card = None
+        self._battle_mode = 'campaign'
 
     def on_enter(self):
         if self._battle_running and self._battle_system:
@@ -93,6 +94,7 @@ class BattleScreen(Screen):
 
     def _select_stage(self, snum):
         self._selected_stage = snum
+        self._battle_mode = 'campaign'
         self._stage_btn.text = f'第{snum}关'
         if hasattr(self, '_stage_popup'):
             self._stage_popup.dismiss()
@@ -221,6 +223,8 @@ class BattleScreen(Screen):
             popup = Popup(title='错误', content=Label(text='请选择队伍'), size_hint=(0.5, 0.3))
             popup.open()
             return
+        self._battle_mode = 'campaign'
+        self._challenge_info = None
         from battle_config import STAGES
         if self._selected_stage not in STAGES:
             popup = Popup(title='错误', content=Label(text=f'关卡 {self._selected_stage} 不存在'),
@@ -689,24 +693,8 @@ class BattleScreen(Screen):
     def _handle_victory(self):
         app = App.get_running_app()
         stage_num = self._selected_stage
-        gacha_reward = 5 + stage_num // 2
-        mat_reward = 2 * (5 + stage_num // 2)
-        essence_reward = 1 + stage_num // 10
-        app.game.gacha_currency += gacha_reward
-        app.game.battle_materials += mat_reward
-        app.game.gene_essence += essence_reward
-        if random.random() < 0.15 + stage_num * 0.002:
-            item = app.game.generate_equipment(stage_num)
-            if item:
-                self.add_log(f'[装备掉落] {item["name"]}!')
-        next_stage = stage_num + 1
-        from battle_config import STAGES
-        if next_stage in STAGES and next_stage not in app.game.unlocked_stages:
-            app.game.unlocked_stages.append(next_stage)
-            app.game.max_stage = max(app.game.max_stage, next_stage)
-        alive_players = [u for u in self._battle_system.player_team if u.is_alive]
-        if len(alive_players) == len(self._battle_system.player_team):
-            app.game.no_loss_stages.add(stage_num)
+        mode = getattr(self, '_battle_mode', 'campaign')
+
         for u in self._battle_system.enemies:
             etype = getattr(u, '_etype', u.name)
             app.game.enemy_kills[etype] = app.game.enemy_kills.get(etype, 0) + 1
@@ -714,12 +702,53 @@ class BattleScreen(Screen):
             height = getattr(u, 'height', 1)
             if width > 1 or height > 1:
                 app.game.enemy_kills['__boss__'] = app.game.enemy_kills.get('__boss__', 0) + 1
+
+        if mode == 'campaign':
+            gacha_reward = 5 + stage_num // 2
+            mat_reward = 2 * (5 + stage_num // 2)
+            essence_reward = 1 + stage_num // 10
+            app.game.gacha_currency += gacha_reward
+            app.game.battle_materials += mat_reward
+            app.game.gene_essence += essence_reward
+            if random.random() < 0.15 + stage_num * 0.002:
+                item = app.game.generate_equipment(stage_num)
+                if item:
+                    self.add_log(f'[装备掉落] {item["name"]}!')
+            next_stage = stage_num + 1
+            from battle_config import STAGES
+            if next_stage in STAGES and next_stage not in app.game.unlocked_stages:
+                app.game.unlocked_stages.append(next_stage)
+                app.game.max_stage = max(app.game.max_stage, next_stage)
+            alive_players = [u for u in self._battle_system.player_team if u.is_alive]
+            if len(alive_players) == len(self._battle_system.player_team):
+                app.game.no_loss_stages.add(stage_num)
+            self._reward_box.clear_widgets()
+            reward_text = f'奖励: 🧬+{gacha_reward} 🧱+{mat_reward} 精华+{essence_reward}'
+            self._reward_box.add_widget(Label(text=reward_text, color=(1, 1, 0.6, 1)))
+        else:
+            if mode == 'pvp':
+                self._reward_box.clear_widgets()
+                self._reward_box.add_widget(Label(text='[PvP] 对决胜利!（练习模式，无主线奖励）', color=(0.6, 1, 0.6, 1)))
+            elif mode == 'challenge':
+                mat_reward = 10 + stage_num // 2
+                app.game.battle_materials += mat_reward
+                self._reward_box.clear_widgets()
+                self._reward_box.add_widget(Label(text=f'[挑战] 胜利! 🧱+{mat_reward}', color=(0.6, 1, 0.6, 1)))
+            elif mode == 'dungeon':
+                mat_reward = 15 + stage_num // 2
+                essence_reward = 2 + stage_num // 10
+                app.game.battle_materials += mat_reward
+                app.game.gene_essence += essence_reward
+                self._reward_box.clear_widgets()
+                self._reward_box.add_widget(Label(text=f'[副本] 胜利! 🧱+{mat_reward} 精华+{essence_reward}', color=(0.6, 1, 0.6, 1)))
+            else:
+                self._reward_box.clear_widgets()
+                self._reward_box.add_widget(Label(text='胜利!', color=(0.6, 1, 0.6, 1)))
+
         app.game._check_all_quests()
         app.game.save_game()
         app.refresh_breeding_combos()
-        self._reward_box.clear_widgets()
-        reward_text = f'奖励: +{gacha_reward} +{mat_reward} +{essence_reward}精华'
-        self._reward_box.add_widget(Label(text=reward_text, color=(1, 1, 0.6, 1)))
+
         ci = getattr(self, '_challenge_info', None)
         if ci:
             import time
@@ -736,6 +765,7 @@ class BattleScreen(Screen):
                 app.game.challenge_scores[tid] = score_entry
             app.game.save_game()
             self.add_log(f'[挑战] 完成! 得分:{ci["points"]} 用时:{mins:02d}:{secs:02d}')
+        self._battle_mode = 'campaign'
 
     def add_log(self, msg):
         self._log.add_widget(Label(text=str(msg), size_hint_y=None, height=dp(20),

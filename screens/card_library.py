@@ -110,6 +110,9 @@ class CardLibraryScreen(Screen):
         delete_btn = Button(text='删除', on_press=lambda _: self._del_card_check(c))
         delete_btn.background_color = (0.8, 0.2, 0.2, 1)
         self._action_bar.add_widget(delete_btn)
+        submit_btn = Button(text='任务提交', on_press=lambda _: self._open_submit_popup(c))
+        submit_btn.background_color = (0.2, 0.4, 0.8, 1)
+        self._action_bar.add_widget(submit_btn)
         if c.is_alive:
             mod_btn = Button(text='模组', on_press=lambda _: self._manage_modules(c))
             self._action_bar.add_widget(mod_btn)
@@ -184,6 +187,44 @@ class CardLibraryScreen(Screen):
 
     def _del_card_check(self, card):
         self._delete_card(card)
+
+    def _open_submit_popup(self, card):
+        app = App.get_running_app()
+        active = app.game.get_active_submit_quests()
+        content = BoxLayout(orientation='vertical', spacing=dp(8), padding=dp(10))
+        t = card.traits
+        content.add_widget(Label(
+            text=f'当前卡牌: {card.name}  攻{t.get("attack", 0)} 生{t.get("health", 0)} 防{t.get("defense", 0)} 速{t.get("speed", 0)}',
+            size_hint_y=None, height=dp(30), color=(0.8, 1, 0.8, 1)))
+        if not active:
+            content.add_widget(Label(text='当前没有可提交的任务', size_hint_y=None, height=dp(40)))
+        else:
+            content.add_widget(Label(text='选择要提交的任务（不消耗卡牌）:', size_hint_y=None, height=dp(30)))
+            for qd in active:
+                reqs = qd.get('requirements', {})
+                ok = (t.get('attack', 0) >= reqs.get('min_atk', 0) and
+                      t.get('health', 0) >= reqs.get('min_hp', 0) and
+                      t.get('defense', 0) >= reqs.get('min_def', 0) and
+                      t.get('speed', 0) >= reqs.get('min_spd', 0))
+                color = (0.6, 1, 0.6, 1) if ok else (1, 0.5, 0.5, 1)
+                btn = Button(text=f'[{"可提交" if ok else "不达标"}] {qd["title"]} - {qd["description"]}',
+                             size_hint_y=None, height=dp(44), background_color=color if ok else (0.3, 0.3, 0.3, 1))
+                btn.bind(on_press=lambda _, q=qd['id']: self._do_submit(q, card, popup))
+                content.add_widget(btn)
+        from kivy.uix.popup import Popup
+        popup = Popup(title='任务提交', content=content, size_hint=(0.9, 0.7))
+        popup.open()
+
+    def _do_submit(self, qid, card, popup):
+        app = App.get_running_app()
+        ok, msg = app.game.submit_card_for_quest(qid, card)
+        if ok:
+            app.game.save_game()
+            app.game._check_all_quests()
+            app.refresh_breeding_combos()
+            popup.dismiss()
+            self._refresh()
+            self._show_detail(card)
 
     def _toggle_favorite(self, card):
         card.favorite = not getattr(card, 'favorite', False)
