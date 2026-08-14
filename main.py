@@ -502,6 +502,18 @@ class GeneCryptApp(App):
                 except Exception as e:
                     log_error(f'KV error {kv_file}: {e}')
     
+    def switch_tab(self, tab_name):
+        tp = getattr(self, '_main_panel', None)
+        if tp is None:
+            return
+        for tab in tp.tab_list:
+            if tab.text == tab_name:
+                try:
+                    tp.switch_to(tab)
+                except:
+                    pass
+                return
+
     def _auto_save(self):
         try:
             if self.game:

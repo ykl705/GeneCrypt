@@ -217,7 +217,4 @@ class ChallengeScreen(Screen):
             'start_time': time.time(),
             'points': pts,
         }
-        for tab in app.root.tab_list:
-            if tab.text == '战斗':
-                app.root.switch_to(tab)
-                break
+        app.switch_tab('战斗')

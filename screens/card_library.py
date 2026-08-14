@@ -166,10 +166,20 @@ class CardLibraryScreen(Screen):
             popup.open()
             return
         app = App.get_running_app()
-        app.game.cards.remove(card)
-        app.game.save_game()
+        try:
+            if card in app.game.cards:
+                app.game.cards.remove(card)
+            app.game.save_game()
+        except Exception as e:
+            popup = Popup(title='错误', content=Label(text=f'删除失败: {e}'),
+                          size_hint=(0.5, 0.25))
+            popup.open()
+            return
         self._selected_card = None
-        app.refresh_breeding_combos()
+        try:
+            app.refresh_breeding_combos()
+        except:
+            pass
         self._refresh()
 
     def _del_card_check(self, card):

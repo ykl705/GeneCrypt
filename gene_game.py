@@ -2111,7 +2111,10 @@ class Game:
                 from gene_config import MODULE_POOLS
                 p = sum(1 for mid, v in MODULE_POOLS.items() if v['level'] == 3 and self.module_inventory.get(mid, 0) > 0)
             elif atype == 'challenge_score':
-                p = max(self.challenge_scores.values(), key=lambda x: x.get('points', 0)).get('points', 0)
+                if self.challenge_scores:
+                    p = max(self.challenge_scores.values(), key=lambda x: x.get('points', 0)).get('points', 0)
+                else:
+                    p = 0
             elif atype == 'hidden':
                 continue
             else:

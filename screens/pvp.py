@@ -143,7 +143,4 @@ class PvPScreen(Screen):
         bs._render_battle_grid()
         bs.add_log('[PvP] 对决开始!')
         Clock.schedule_interval(bs._battle_tick, 0.3)
-        for tab in app.root.tab_list:
-            if tab.text == '战斗':
-                app.root.switch_to(tab)
-                break
+        app.switch_tab('战斗')

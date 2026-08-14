@@ -156,10 +156,7 @@ class DungeonScreen(Screen):
             from kivy.clock import Clock
             Clock.schedule_interval(bs._battle_tick, 0.3)
             bs._dungeon_info = {'dung': dung, 'floor': getattr(self, '_cur_floor', 0)}
-        for tab in app.root.tab_list:
-            if tab.text == '战斗':
-                app.root.switch_to(tab)
-                break
+        app.switch_tab('战斗')
 
     def _start_boss(self, room, dung):
         app = App.get_running_app()
