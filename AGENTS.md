@@ -71,8 +71,34 @@ python -c "import sys; sys.path.insert(0,'.'); import gene_config as gc, gene_en
 - `__USE_OPENGL_ES2=1` is passed via CFLAGS but Kivy's `config.h` defines it to `0` — command-line `-D` flag takes precedence
 - APK: `genecrypt-0.1.0-arm64-v8a-debug.apk` (~34MB), available as GitHub Actions artifact
 
+## Content & Balance Overhaul (2026-08)
+- `challenge_factors.py` — 118 challenge factors engine; hooks: apply_pre_battle /
+  on_enemy_action / on_player_action / process_deaths / process_tick /
+  try_spawn_next_wave. BattleSystem takes `challenge_factors` param.
+  Engine exceptions caught+logged, never crash battle.
+- Genome quality system: `Card.genome_quality` scored from dominant
+  stat/skill/gacha genes (vital excluded, recessive inverted, chrG ×1.0).
+  Random cards get 25% allele dominance; breeding mutation can flip
+  dominance (35% on gene mutation). Selective breeding climbs quality.
+- `calculate_traits` = `_compute_base_traits` (genome + QUALITY_EXPONENTS:
+  atk 8.5 / hp 7.5 / def 4.5 / spd 4.0) + multipliers (star/modules/equip/
+  sets/stat_break/genome_boost/building). Reward cards keep deterministic
+  `_reward_traits_formula` via `_reward_quality` — star-up no longer
+  destroys their stats.
+- Difficulty: MILESTONE_BONUS smoothed (1.08-1.35); SPECIAL_SKIP_EXTRA
+  includes bosses+support units (no extra_count inflation); defense floor
+  = 15% raw damage; enemy healing halved; stage 99/100 boss counts cut.
+- New systems: PvP bot ladder (5 tiers, rating, rewards), infinity mode
+  button, base building effects, equipment set bonuses, auto-breeding,
+  spirit card drops, hidden achievements, submit_card quest popup,
+  tech tree UI (works), gacha API fix, battle modes (campaign/pvp/
+  pvp_ladder/challenge/dungeon/infinity) isolate victory rewards.
+- Local test harness (no kivy installed): headless BattleSystem sims at
+  `%TEMP%\opencode\test_curve.py`, `test_factors.py`, `test_pvp.py`.
+
 ## Known Issues
-- `_optimize_genome` is a **complete no-op** — `STAT_ENHANCE_REGIONS` start positions (120+) are beyond all gene region ends (max 120 on chr1/chr2, 191 on chr3, 70 on chrX). Both `_optimize_genome` and `_apply_genome_enhancements` read/write only padding (random bases), never actual gene data. Not called for reward cards anymore.
-- `calculate_traits` uses `sum(ord(b)) % range + min` which is effectively pseudo-random per-instance — quality has no effect on normal card stats. Bred/created cards still use this system.
-- `Card.__init__` calls `calculate_traits()` internally with the built-in random sequence, producing random stats independent of quality. Reward cards now override this with `_compute_reward_traits` after construction.
-- Attack values for reward cards are now strictly deterministic: same quality → same stats, monotonically increasing with quality.
+- `_optimize_genome` / `_apply_genome_enhancements` still read padding —
+  enhancements no longer applied in `_compute_base_traits`; `genome_boost`
+  tech instead multiplies stats directly in `calculate_traits`.
+- Desktop-only `card_creator.py` and `gene_game_PC版.py` are untracked
+  dev tools (tkinter) — excluded from APK build; don't commit them.
