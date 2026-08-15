@@ -1493,7 +1493,9 @@ ENEMY_SYNERGIES = [
     ('annihilator', 'suicide_bomber', 'attack', 1.2),
 ]
 
-SPECIAL_SKIP_EXTRA = {'rock'}
+SPECIAL_SKIP_EXTRA = {'rock', 'devourer', 'void_destroyer', 'mech_god', 'abyss_lord',
+                      'guardian_spirit', 'commander', 'war_drummer', 'corruption_source',
+                      'vengeful_wraith', 'bone_dragon'}
 
 
 def _apply_synergies(enemies, enemy_types_in_stage):
@@ -1652,9 +1654,9 @@ def _generate_stages():
         elif stage_num <= 98:
             enemy_config = [('mech_god', 2), ('bone_dragon', 2), ('guardian_spirit', 1)]
         elif stage_num == 99:
-            enemy_config = [('void_destroyer', 2), ('mech_god', 1), ('rock', 1)]
+            enemy_config = [('void_destroyer', 1), ('mech_god', 1), ('rock', 1)]
         else:
-            enemy_config = [('void_destroyer', 3), ('mech_god', 2), ('rock', 1)]
+            enemy_config = [('void_destroyer', 2), ('mech_god', 1), ('rock', 1)]
 
         # Boss stages every 5 for stages 31-100
         if stage_num >= 31 and stage_num % 5 == 0:
@@ -2823,8 +2825,8 @@ for _map_stage_num, _map_stage_data in MAP_STAGES.items():
 # 里程碑关卡难度尖刺 — 在生成 + JSON 覆盖之后统一应用
 # ============================================================
 MILESTONE_BONUS = {
-    20: 1.15, 30: 1.30, 40: 1.20, 50: 1.40,
-    60: 1.25, 70: 1.50, 80: 1.30, 90: 1.60, 100: 2.0,
+    20: 1.08, 30: 1.10, 40: 1.10, 50: 1.15,
+    60: 1.12, 70: 1.15, 80: 1.15, 90: 1.20, 100: 1.35,
 }
 
 MILESTONE_BOSS_PASSIVES = {

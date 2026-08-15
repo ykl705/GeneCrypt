@@ -114,6 +114,29 @@ QUEST_DEFINITIONS = [
     {'id':'c_15','requires':['c_14'],'category':'challenge','type':'no_loss_clear','target_stage':150,'target':1,'title':'无损挑战·五','description':'无阵亡通关第150关','rewards':[{'type':'gacha_currency','amount':2000},{'type':'battle_materials','amount':1000},{'type':'card_with_skills','skill_names':['剧毒新星','永冻领域','万象终结'],'genome_quality':0.9}]},
 ]
 
+def _reward_traits_formula(quality):
+    q = max(0.0, min(0.95, quality))
+    return {
+        'attack': int(12 * (1 + q) ** 9),
+        'health': int(60 * (1 + q) ** 6),
+        'defense': int(5 * (1 + q) ** 6),
+        'speed': int(8 * (1 + q) ** 5),
+        'stamina': int(20 * (1 + q) ** 5),
+        'lifespan': int(50 * (1 + q) ** 4),
+        'critical_rate': int(3 + q * 15),
+        'dodge_rate': int(2 + q * 10),
+    }
+
+
+# 质量对属性成长指数：繁殖卡 base × (1+q)^exp
+QUALITY_EXPONENTS = {
+    'attack': 8.5,
+    'health': 7.5,
+    'defense': 4.5,
+    'speed': 4.0,
+}
+
+
 class Card:
     card_count = 0
     _genome_boost_mult = 1.0
@@ -143,6 +166,7 @@ class Card:
         
         self.genes = {}
         self._rebuild_genes()
+        self.genome_quality = self._compute_genome_quality()
         self.traits = self.calculate_traits()
         self.is_alive = self.check_vital_genes()
         self.skills = self.get_skills()
@@ -178,14 +202,14 @@ class Card:
         return 'female'
     
     @staticmethod
-    def _build_genome_for_regions(regions):
+    def _build_genome_for_regions(regions, random_dominance=False):
         parts = []
         is_dominant = {}
         for gene_name, _, _ in regions:
             tmpl = GENE_TEMPLATES.get(gene_name, {})
             seq = tmpl.get('sequence', 'ATGCATGC')
             parts.append(seq)
-            is_dominant[gene_name] = True
+            is_dominant[gene_name] = random.random() < 0.25 if random_dominance else True
         return ''.join(parts), is_dominant
 
     @staticmethod
@@ -281,9 +305,9 @@ class Card:
             if chr_id in ('chrY', 'chrG'):
                 continue
             if chr_id == 'chrX':
-                x_genome, x_dom = Card._build_genome_for_regions(GENE_REGIONS['chrX'])
+                x_genome, x_dom = Card._build_genome_for_regions(GENE_REGIONS['chrX'], random_dominance=True)
                 x_genome = Card._pad_genome(x_genome, 'chrX')
-                y_genome, y_dom = Card._build_genome_for_regions(GENE_REGIONS['chrY'])
+                y_genome, y_dom = Card._build_genome_for_regions(GENE_REGIONS['chrY'], random_dominance=True)
                 y_genome = Card._pad_genome(y_genome, 'chrY')
                 if gender == 'male':
                     chromosomes['chrX'] = [
@@ -296,7 +320,7 @@ class Card:
                         {'type': 'X', 'genome': x_genome, 'is_dominant': copy.deepcopy(x_dom)}
                     ]
             else:
-                genome, dom = Card._build_genome_for_regions(GENE_REGIONS[chr_id])
+                genome, dom = Card._build_genome_for_regions(GENE_REGIONS[chr_id], random_dominance=True)
                 genome = Card._pad_genome(genome, chr_id)
                 chromosomes[chr_id] = [
                     {'genome': genome, 'is_dominant': copy.deepcopy(dom)},
@@ -444,59 +468,37 @@ class Card:
                         'chromosome': 'chrX',
                     }
     
-    def calculate_traits(self):
-        traits = {}
-        
+    def _compute_genome_quality(self):
+        score = 0.0
+        max_score = 0.0
         for gene_name, gene_data in self.genes.items():
-            template = GENE_TEMPLATES.get(gene_name, {})
-            trait_name = template.get('affects_trait')
-            
-            if not trait_name:
+            tmpl = GENE_TEMPLATES.get(gene_name, {})
+            cat = tmpl.get('category', 'stat')
+            if cat == 'vital' or gene_data.get('methylated', False):
                 continue
-            
-            allele1 = gene_data['allele1']
-            allele2 = gene_data['allele2']
-            is_template_dominant = gene_data.get('template_dominant', True)
-            methylated = gene_data['methylated']
-            
-            a1_is_dominant = allele1.get('is_dominant', True) == is_template_dominant
-            a2_is_dominant = allele2.get('is_dominant', True) == is_template_dominant
-            
-            if a1_is_dominant and a2_is_dominant:
-                genotype = 'AA'
-            elif not a1_is_dominant and not a2_is_dominant:
-                genotype = 'aa'
+            a1d = gene_data['allele1'].get('is_dominant', True)
+            a2d = gene_data['allele2'].get('is_dominant', True)
+            dom = 1.0 if (a1d and a2d) else (0.5 if (a1d or a2d) else 0.0)
+            chr_id = gene_data.get('chromosome', 'chr1')
+            if chr_id == 'chrG':
+                score += 1.0 * dom
+                max_score += 1.0
+            elif cat == 'stat':
+                score += 0.8 * dom
+                max_score += 0.8
+            elif cat == 'recessive':
+                score += 0.2 * (1.0 - dom)
+                max_score += 0.2
             else:
-                genotype = 'Aa'
-            
-            config = TRAIT_CONFIG.get(trait_name, {})
-            base_min = config.get('base_min', 10)
-            base_max = config.get('base_max', 30)
-            
-            if genotype == 'AA':
-                value_min = int(base_max * 0.8)
-                value_max = base_max + 10
-            elif genotype == 'Aa':
-                value_min = int(base_min * 1.1)
-                value_max = int(base_max * 0.75)
-            else:
-                value_min = base_min
-                value_max = base_min + 1
-            
-            base_value = sum(ord(b) for b in allele1['seq']) % (value_max - value_min) + value_min
-            
-            if methylated:
-                base_value = int(base_value * METHYLATION_EFFECT['stat_factor'])
-            
-            traits[trait_name] = base_value
-        
-        # Apply genome sequence enhancements to stat traits
-        for trait_name in list(traits.keys()):
-            if trait_name in STAT_ENHANCE_REGIONS:
-                traits[trait_name] = self._apply_genome_enhancements(trait_name, traits[trait_name])
-        
-        self.base_traits = dict(traits)
-        
+                score += 0.3 * dom
+                max_score += 0.3
+        if max_score <= 0:
+            return 0.0
+        return round(min(1.0, max(0.0, score / max_score)), 3)
+
+    def calculate_traits(self):
+        traits = self._compute_base_traits()
+
         # Apply life_extension bonus to lifespan trait
         life_mult = getattr(Card, '_life_extension_mult', 1.0)
         if life_mult != 1.0 and 'lifespan' in traits:
@@ -507,6 +509,13 @@ class Card:
         if stat_mult != 1.0:
             for t in list(traits.keys()):
                 traits[t] = int(traits[t] * stat_mult)
+
+        # Apply genome_boost tech (终极基因组强化) as stat multiplier
+        gb_mult = getattr(Card, '_genome_boost_mult', 1.0)
+        if gb_mult != 1.0:
+            for t in ('attack', 'health', 'defense', 'speed'):
+                if t in traits:
+                    traits[t] = int(traits[t] * gb_mult)
 
         # Apply base building global ATK bonus (基因研究所)
         build_mult = getattr(Card, '_building_atk_mult', 1.0)
@@ -596,7 +605,68 @@ class Card:
                                 traits[t] = int(traits[t] * 1.25)
 
         return traits
-    
+
+    def _compute_base_traits(self):
+        rq = getattr(self, '_reward_quality', None)
+        if rq is not None:
+            base = _reward_traits_formula(rq)
+            self.base_traits = dict(base)
+            return dict(base)
+        traits = {}
+
+        for gene_name, gene_data in self.genes.items():
+            template = GENE_TEMPLATES.get(gene_name, {})
+            trait_name = template.get('affects_trait')
+
+            if not trait_name:
+                continue
+
+            allele1 = gene_data['allele1']
+            allele2 = gene_data['allele2']
+            is_template_dominant = gene_data.get('template_dominant', True)
+            methylated = gene_data['methylated']
+
+            a1_is_dominant = allele1.get('is_dominant', True) == is_template_dominant
+            a2_is_dominant = allele2.get('is_dominant', True) == is_template_dominant
+
+            if a1_is_dominant and a2_is_dominant:
+                genotype = 'AA'
+            elif not a1_is_dominant and not a2_is_dominant:
+                genotype = 'aa'
+            else:
+                genotype = 'Aa'
+
+            config = TRAIT_CONFIG.get(trait_name, {})
+            base_min = config.get('base_min', 10)
+            base_max = config.get('base_max', 30)
+
+            if genotype == 'AA':
+                value_min = int(base_max * 0.8)
+                value_max = base_max + 10
+            elif genotype == 'Aa':
+                value_min = int(base_min * 1.1)
+                value_max = int(base_max * 0.75)
+            else:
+                value_min = base_min
+                value_max = base_min + 1
+
+            base_value = sum(ord(b) for b in allele1['seq']) % (value_max - value_min) + value_min
+
+            if methylated:
+                base_value = int(base_value * METHYLATION_EFFECT['stat_factor'])
+
+            traits[trait_name] = base_value
+
+        # Quality scaling: 繁殖卡属性随基因组质量指数成长
+        q = getattr(self, 'genome_quality', 0.0) or 0.0
+        if q > 0:
+            for t, e in QUALITY_EXPONENTS.items():
+                if t in traits:
+                    traits[t] = int(traits[t] * (1 + q) ** e)
+
+        self.base_traits = dict(traits)
+        return traits
+
     def _apply_genome_enhancements(self, trait_name, base_value):
         regions = STAT_ENHANCE_REGIONS.get(trait_name, [])
         if not regions:
@@ -757,6 +827,8 @@ class Card:
             'chip_slots': getattr(self, 'chip_slots', 1),
             'favorite': getattr(self, 'favorite', False),
             'base_traits': getattr(self, 'base_traits', {}),
+            'genome_quality': getattr(self, 'genome_quality', 0.0),
+            '_reward_quality': getattr(self, '_reward_quality', None),
         }
     
     @staticmethod
@@ -805,6 +877,12 @@ class Card:
         card.equipment = data.get('equipment', {})
         card.favorite = data.get('favorite', False)
         card.base_traits = data.get('base_traits', {})
+        rq = data.get('_reward_quality', None)
+        if rq is not None:
+            card._reward_quality = rq
+            card.genome_quality = rq
+        else:
+            card.genome_quality = data.get('genome_quality', card._compute_genome_quality())
         for chip_info in card.chips:
             skill = chip_info.get('skill_name', '')
             if skill and skill not in card.skills:
@@ -1107,11 +1185,19 @@ class Game:
                 for gene_name, start, end in GENE_REGIONS.get(chr_id if chr_id != 'chrX' or h_idx == 0 else 'chrY', []):
                     if random.random() < mutation_rate:
                         genome = self._mutate_genome_region(genome, start, end)
+                        if random.random() < 0.35:
+                            dom_map = homolog.get('is_dominant')
+                            if isinstance(dom_map, dict) and gene_name in dom_map:
+                                dom_map[gene_name] = True
                 homolog['genome'] = genome
                 if chr_id == 'chrX' and h_idx == 1 and homolog.get('type') == 'Y':
                     for gene_name, start, end in GENE_REGIONS['chrY']:
                         if random.random() < mutation_rate:
                             genome = self._mutate_genome_region(genome, start, end)
+                            if random.random() < 0.35:
+                                dom_map = homolog.get('is_dominant')
+                                if isinstance(dom_map, dict) and gene_name in dom_map:
+                                    dom_map[gene_name] = True
                     homolog['genome'] = genome
 
         self.breed_counter += 1
@@ -1442,11 +1528,19 @@ class Game:
                 for gene_name, start, end in GENE_REGIONS.get(chr_id if chr_id != 'chrX' or h_idx == 0 else 'chrY', []):
                     if random.random() < mutation_rate:
                         genome = self._mutate_genome_region(genome, start, end)
+                        if random.random() < 0.35:
+                            dom_map = homolog.get('is_dominant')
+                            if isinstance(dom_map, dict) and gene_name in dom_map:
+                                dom_map[gene_name] = True
                 homolog['genome'] = genome
                 if chr_id == 'chrX' and h_idx == 1 and homolog.get('type') == 'Y':
                     for gene_name, start, end in GENE_REGIONS['chrY']:
                         if random.random() < mutation_rate:
                             genome = self._mutate_genome_region(genome, start, end)
+                            if random.random() < 0.35:
+                                dom_map = homolog.get('is_dominant')
+                                if isinstance(dom_map, dict) and gene_name in dom_map:
+                                    dom_map[gene_name] = True
                     homolog['genome'] = genome
         return child_chromosomes, child_gender
     
@@ -2285,7 +2379,10 @@ class Game:
         card = Card(name, gender=random.choice(['male','female']))
         if not card.is_alive:
             return None
+        card._reward_quality = quality
+        card.genome_quality = quality
         card.traits = self._compute_reward_traits(quality)
+        card.base_traits = dict(card.traits)
         for gene_name in SKILL_GENES:
             tmpl = GENE_TEMPLATES.get(gene_name, {})
             desired = tmpl.get('skill_name') in skill_names
@@ -2337,18 +2434,7 @@ class Game:
         return card
 
     def _compute_reward_traits(self, quality):
-        q = max(0.0, min(0.95, quality))
-        traits = {
-            'attack': int(12 * (1 + q) ** 9),
-            'health': int(60 * (1 + q) ** 6),
-            'defense': int(5 * (1 + q) ** 6),
-            'speed': int(8 * (1 + q) ** 5),
-            'stamina': int(20 * (1 + q) ** 5),
-            'lifespan': int(50 * (1 + q) ** 4),
-            'critical_rate': int(3 + q * 15),
-            'dodge_rate': int(2 + q * 10),
-        }
-        return traits
+        return _reward_traits_formula(quality)
 
     def save_game(self):
         try:
@@ -2522,7 +2608,8 @@ class BattleCard:
         if self.has_status('defense_buff'):
             buff_value = self.status_effects['defense_buff'].get('value', 0)
             effective_defense = int(self.defense * (1 + buff_value / 100))
-        actual_damage = max(damage - effective_defense, BATTLE_CONFIG['min_damage'])
+        actual_damage = max(damage - effective_defense,
+                            max(BATTLE_CONFIG['min_damage'], int(damage * 0.15)))
         if self.shield > 0:
             shield_damage = min(self.shield, actual_damage)
             self.shield -= shield_damage
@@ -2550,7 +2637,7 @@ class BattleCard:
     
     def add_status(self, status_name, turns, attacker_attack=0):
         if getattr(self, 'immune_to_debuffs', False):
-            return
+            return None
         if status_name == 'poison':
             if status_name not in self.status_effects:
                 self.status_effects[status_name] = {'turns': turns, 'stacks': 1, 'attacker_attack': attacker_attack}
@@ -2560,12 +2647,15 @@ class BattleCard:
                 self.status_effects[status_name]['attacker_attack'] = max(
                     self.status_effects[status_name]['attacker_attack'], attacker_attack
                 )
+            return self.status_effects[status_name]
         elif status_name not in self.status_effects:
             self.status_effects[status_name] = {'turns': turns}
+            return self.status_effects[status_name]
         else:
             self.status_effects[status_name]['turns'] = max(
                 self.status_effects[status_name]['turns'], turns
             )
+            return self.status_effects[status_name]
     
     def remove_status(self, status_name):
         if status_name in self.status_effects:
@@ -2695,7 +2785,8 @@ class Enemy:
         if self.has_status('defense_buff'):
             buff_value = self.status_effects['defense_buff'].get('value', 0)
             effective_defense = int(self.defense * (1 + buff_value / 100))
-        actual_damage = max(damage - effective_defense, BATTLE_CONFIG['min_damage'])
+        actual_damage = max(damage - effective_defense,
+                            max(BATTLE_CONFIG['min_damage'], int(damage * 0.15)))
         if self.shield > 0:
             shield_damage = min(self.shield, actual_damage)
             self.shield -= shield_damage
@@ -2738,13 +2829,13 @@ class Enemy:
     
     def add_status(self, status_name, turns, attacker_attack=0):
         if getattr(self, 'immune_to_debuffs', False):
-            return
+            return None
         _elem_immune = getattr(self, '_elem_immune', None)
         if _elem_immune and status_name in _elem_immune:
-            return
+            return None
         DEBUFFS = {'poison', 'sleep', 'paralyze', 'confuse'}
         if status_name in DEBUFFS and getattr(self, 'purify_shield_expires', 0.0) > time.time():
-            return
+            return None
         if status_name == 'poison':
             if status_name not in self.status_effects:
                 self.status_effects[status_name] = {'turns': turns, 'stacks': 1, 'attacker_attack': attacker_attack}
@@ -2754,12 +2845,15 @@ class Enemy:
                 self.status_effects[status_name]['attacker_attack'] = max(
                     self.status_effects[status_name]['attacker_attack'], attacker_attack
                 )
+            return self.status_effects[status_name]
         elif status_name not in self.status_effects:
             self.status_effects[status_name] = {'turns': turns}
+            return self.status_effects[status_name]
         else:
             self.status_effects[status_name]['turns'] = max(
                 self.status_effects[status_name]['turns'], turns
             )
+            return self.status_effects[status_name]
     
     def remove_status(self, status_name):
         if status_name in self.status_effects:
@@ -3179,6 +3273,8 @@ class BattleSystem:
         
         elif skill_type == 'heal':
             heal_value = self._skill_scale(skill_effect.get('heal_value', 20), attacker, 0.3)
+            if is_enemy:
+                heal_value = int(heal_value * 0.5)
             attacker.heal(heal_value)
             self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，恢复 {heal_value} 点生命!")
         
@@ -3270,8 +3366,9 @@ class BattleSystem:
         elif skill_type == 'buff':
             buff_value = skill_effect.get('buff_value', 20)
             turns = skill_effect.get('turns', 3)
-            attacker.add_status('attack_buff', turns)
-            attacker.status_effects['attack_buff']['value'] = buff_value
+            d = attacker.add_status('attack_buff', turns)
+            if d:
+                d['value'] = buff_value
             self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，攻击力提升 {buff_value}%!")
 
         elif skill_type == 'rearrange':
@@ -3284,8 +3381,9 @@ class BattleSystem:
 
         elif skill_type == 'surge':
             turns = skill_effect.get('turns', 5)
-            attacker.add_status('guarantee_skill', turns)
-            attacker.status_effects['guarantee_skill']['remaining'] = turns
+            d = attacker.add_status('guarantee_skill', turns)
+            if d:
+                d['remaining'] = turns
             self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，接下来 {turns} 次行动必定释放技能!")
 
         elif skill_type == 'heal_team':
@@ -3294,6 +3392,8 @@ class BattleSystem:
             targets_count = skill_effect.get('targets', 3)
             targets_heal = random.sample(alive, min(targets_count, len(alive)))
             heal_val = self._skill_scale(skill_effect.get('base_heal', 25), attacker, 0.4)
+            if is_enemy:
+                heal_val = int(heal_val * 0.5)
             healed_ids = []
             for t in targets_heal:
                 t.heal(heal_val)
@@ -3313,15 +3413,17 @@ class BattleSystem:
         elif skill_type == 'curse':
             turns = skill_effect.get('turns', 3)
             target.add_status('curse', turns)
-            dmg_mult = skill_effect.get('damage_mult', 1.5)
-            target.status_effects['curse']['damage_mult'] = dmg_mult
+            if 'curse' in target.status_effects:
+                dmg_mult = skill_effect.get('damage_mult', 1.5)
+                target.status_effects['curse']['damage_mult'] = dmg_mult
             self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，{target.name} 受到诅咒，伤害加深!")
 
         elif skill_type == 'burn':
             turns = skill_effect.get('turns', 3)
             target.add_status('burn', turns)
-            max_hp_pct = skill_effect.get('max_hp_pct', 0.15)
-            target.status_effects['burn']['max_hp_pct'] = max_hp_pct
+            if 'burn' in target.status_effects:
+                max_hp_pct = skill_effect.get('max_hp_pct', 0.15)
+                target.status_effects['burn']['max_hp_pct'] = max_hp_pct
             self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，{target.name} 被灼烧!")
 
         elif skill_type == 'execute':
@@ -3679,8 +3781,9 @@ class BattleSystem:
             team = self.enemies if is_enemy else self.player_team
             for ally in team:
                 if ally.is_alive:
-                    ally.add_status('attack_buff', turns)
-                    ally.status_effects['attack_buff']['value'] = int(atk_bonus * 100)
+                    d = ally.add_status('attack_buff', turns)
+                    if d:
+                        d['value'] = int(atk_bonus * 100)
             self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，全体友方攻击力提升{int(atk_bonus*100)}%!")
 
         elif skill_type == 'void_teleport':

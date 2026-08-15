@@ -368,8 +368,9 @@ def on_enemy_action(bs, enemy, result):
             enemy.status_effects[kind]['value'] = enemy.status_effects[kind].get('value', 10) + 10
             enemy.status_effects[kind]['turns'] = 3
         else:
-            enemy.add_status(kind, 3)
-            enemy.status_effects[kind]['value'] = 10
+            d = enemy.add_status(kind, 3)
+            if d:
+                d['value'] = 10
         bs.add_log(f'[因子] {enemy.name} 快速进化: {kind}+10%!')
 
     if 'subject_vampiric' in ids and '变异实验体' in enemy.name and result:
