@@ -2573,6 +2573,8 @@ class Enemy:
                 self.passive_skills['荆棘'] = _reflect_pct
     
     def take_damage(self, damage, attacker=None):
+        if getattr(self, '_spell_shield', False) and not getattr(attacker, '_casting_skill', False):
+            return 0
         if self.has_status('evade'):
             self.remove_status('evade')
             return 0
@@ -2636,6 +2638,9 @@ class Enemy:
     def add_status(self, status_name, turns, attacker_attack=0):
         if getattr(self, 'immune_to_debuffs', False):
             return
+        _elem_immune = getattr(self, '_elem_immune', None)
+        if _elem_immune and status_name in _elem_immune:
+            return
         DEBUFFS = {'poison', 'sleep', 'paralyze', 'confuse'}
         if status_name in DEBUFFS and getattr(self, 'purify_shield_expires', 0.0) > time.time():
             return
@@ -2682,11 +2687,26 @@ class Enemy:
 
 
 class BattleSystem:
-    def __init__(self, player_grid, enemy_data_list, stage_num=1, skill_enhance_level=0, enemy_grid_size=None):
+    def __init__(self, player_grid, enemy_data_list, stage_num=1, skill_enhance_level=0, enemy_grid_size=None, challenge_factors=None):
         self.marked_target = None
         self.grid_size = 3
         self.enemy_grid_size = enemy_grid_size if enemy_grid_size else (4 if stage_num > 60 else 3)
-        self.player_team = [BattleCard(card, pos, self.grid_size) for pos, card in player_grid.items() if card.is_alive]
+        self.challenge_factors = challenge_factors or {}
+        self._factor_ids = set(self.challenge_factors.keys())
+        self._factor_state = {}
+        self._extra_action_depth = 0
+        self._extra_skill_depth = 0
+        from challenge_factors import FORMATIONS, TEAM3, TEAM4
+        if any(fid in self._factor_ids for fid in FORMATIONS):
+            self.enemy_grid_size = 5
+        self._formation_locked = False
+
+        limited_grid = dict(player_grid)
+        if any(fid in self._factor_ids for fid in TEAM3):
+            limited_grid = dict(sorted(player_grid.items(), key=lambda kv: kv[1].traits.get('attack', 0), reverse=True)[:3])
+        elif any(fid in self._factor_ids for fid in TEAM4):
+            limited_grid = dict(sorted(player_grid.items(), key=lambda kv: kv[1].traits.get('attack', 0), reverse=True)[:4])
+        self.player_team = [BattleCard(card, pos, self.grid_size) for pos, card in limited_grid.items() if card.is_alive]
         self.skill_enhance_level = skill_enhance_level
         
         self.battle_log = []
@@ -2716,13 +2736,20 @@ class BattleSystem:
             enemy._enemies_ref = self.enemies
 
         self.stage_num = stage_num
-        if stage_num >= 50:
+        if stage_num >= 50 and not self._factor_ids:
             self._assign_traits()
         self.is_running = False
         self.is_auto = False
         self.winner = None
         self.current_turn = 0
         self._all_units_cache = self.player_team + self.enemies
+        if self._factor_ids:
+            try:
+                from challenge_factors import apply_pre_battle as _cf_pre
+                _cf_pre(self)
+                self._all_units_cache = self.player_team + self.enemies
+            except Exception as e:
+                self.add_log(f'[因子初始化异常] {e}')
     
     def _rebuild_unit_cache(self):
         self._all_units_cache = self.player_team + self.enemies
@@ -2819,8 +2846,20 @@ class BattleSystem:
         
         if attacker.is_player:
             result = self.execute_player_turn(attacker, targets)
+            if self._factor_ids:
+                try:
+                    from challenge_factors import on_player_action as _cf_pact
+                    _cf_pact(self, attacker)
+                except Exception:
+                    pass
         else:
             result = self.execute_enemy_turn(attacker)
+            if self._factor_ids:
+                try:
+                    from challenge_factors import on_enemy_action as _cf_eact
+                    _cf_eact(self, attacker, result)
+                except Exception as e:
+                    self.add_log(f'[因子动作异常] {e}')
         
         if result:
             target_obj = result.get('target_obj')
@@ -2986,6 +3025,13 @@ class BattleSystem:
             d['turns'] = remaining
 
     def execute_skill(self, attacker, target, force_skill=None):
+        try:
+            attacker._casting_skill = True
+            return self._execute_skill_inner(attacker, target, force_skill)
+        finally:
+            attacker._casting_skill = False
+
+    def _execute_skill_inner(self, attacker, target, force_skill=None):
         if force_skill:
             skill_name = force_skill
         elif not attacker.skills:
@@ -3120,27 +3166,10 @@ class BattleSystem:
         elif skill_type == 'rearrange':
             units = self.enemies if not is_enemy else self.player_team
             target_grid = self.enemy_grid_size if not is_enemy else self.grid_size
-            alive = [u for u in units if u.is_alive]
-            overlords = [u for u in alive if getattr(u, 'width', 1) > 1 or getattr(u, 'height', 1) > 1]
-            small = [u for u in alive if getattr(u, 'width', 1) == 1 and getattr(u, 'height', 1) == 1]
-            if len(small) >= 2:
-                occupied = set()
-                for o in overlords:
-                    for p in getattr(o, 'occupied_positions', [o.position]):
-                        occupied.add(p)
-                _max_pos = target_grid * target_grid
-                free = [p for p in range(_max_pos) if p not in occupied]
-                if len(free) >= len(small):
-                    random.shuffle(free)
-                    for u, new_pos in zip(small, free[:len(small)]):
-                        u.position = new_pos
-                        u.row = new_pos // target_grid
-                        u.col = new_pos % target_grid
-                    self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，打乱了对方阵型!")
-                else:
-                    self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，但空间不足，未能扰乱阵型!")
+            if not is_enemy and self._formation_locked:
+                self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，但敌方钢铁之阵无法打乱!")
             else:
-                self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，但可移动目标不足，未能扰乱阵型!")
+                self._do_rearrange(attacker, units, target_grid, name_prefix, skill_name)
 
         elif skill_type == 'surge':
             turns = skill_effect.get('turns', 5)
@@ -3571,11 +3600,41 @@ class BattleSystem:
 
         return {'type': 'skill', 'skill': skill_name, 'attacker': attacker.name, 'target': target.name, 'attacker_obj': attacker, 'target_obj': target}
 
+    def _do_rearrange(self, attacker, units, target_grid, name_prefix, skill_name):
+        alive = [u for u in units if u.is_alive]
+        overlords = [u for u in alive if getattr(u, 'width', 1) > 1 or getattr(u, 'height', 1) > 1]
+        small = [u for u in alive if getattr(u, 'width', 1) == 1 and getattr(u, 'height', 1) == 1]
+        if len(small) >= 2:
+            occupied = set()
+            for o in overlords:
+                for p in getattr(o, 'occupied_positions', [o.position]):
+                    occupied.add(p)
+            _max_pos = target_grid * target_grid
+            free = [p for p in range(_max_pos) if p not in occupied]
+            if len(free) >= len(small):
+                random.shuffle(free)
+                for u, new_pos in zip(small, free[:len(small)]):
+                    u.position = new_pos
+                    u.row = new_pos // target_grid
+                    u.col = new_pos % target_grid
+                self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，打乱了对方阵型!")
+            else:
+                self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，但空间不足，未能扰乱阵型!")
+        else:
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，但可移动目标不足，未能扰乱阵型!")
+
     def check_winner(self):
         player_alive = any(p.is_alive for p in self.player_team)
         enemy_alive = any(e.is_alive for e in self.enemies)
 
         if not enemy_alive:
+            if self._factor_ids:
+                try:
+                    from challenge_factors import try_spawn_next_wave as _cf_wave
+                    if _cf_wave(self):
+                        return False
+                except Exception as e:
+                    self.add_log(f'[波次异常] {e}')
             self.winner = 'player'
             return True
         if not player_alive:
@@ -3594,6 +3653,16 @@ class BattleSystem:
 
         return False
     
+    def process_death_triggers(self):
+        if not self._factor_ids:
+            return
+        try:
+            from challenge_factors import process_deaths as _cf_deaths, process_tick as _cf_tick
+            _cf_deaths(self)
+            _cf_tick(self)
+        except Exception as e:
+            self.add_log(f'[因子周期异常] {e}')
+
     def update_status_damage(self):
         poison_mult = 1.0
         for e in self.enemies:

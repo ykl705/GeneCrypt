@@ -531,6 +531,7 @@ class BattleScreen(Screen):
                 return False
             bs.update_action_bars_frame()
             bs.update_status_damage()
+            bs.process_death_triggers()
             for unit in bs._all_units_cache:
                 if not unit.is_alive: continue
                 se = unit.status_effects

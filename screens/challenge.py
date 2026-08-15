@@ -25,6 +25,44 @@ class ChallengeScreen(Screen):
          'difficulty': '★★★★★★★', 'unlock': 120},
     ]
 
+    THEME_ENEMY_POOLS = {
+        'subject_rampage': ['basic', 'soldier', 'mutant', 'elite', 'commander', 'healer', 'boss', 'overlord'],
+        'abandoned_lab': ['lab_slime', 'lab_culture', 'lab_barrel', 'lab_mutanthound', 'lab_centrifuge',
+                          'lab_gasleak', 'lab_mercury', 'lab_eyestalk', 'lab_tentacle', 'lab_zombie',
+                          'lab_injector', 'lab_fumes', 'lab_cleaner', 'lab_generator', 'lab_containment',
+                          'lab_crawler', 'lab_overlord'],
+        'ancient_ruins': ['ruins_guardian', 'ruins_ballista', 'ruins_statue', 'ruins_hourglass',
+                          'ruins_golem', 'ruins_phantom', 'ruins_trap', 'ruins_obelisk', 'ruins_mummy',
+                          'ruins_scarab', 'ruins_priestess', 'ruins_warrior', 'ruins_archer',
+                          'ruins_sphinx', 'ruins_gate', 'ruins_titan'],
+        'elemental_cycle': ['elem_fire', 'elem_ice', 'elem_thunder', 'elem_earth', 'elem_magma',
+                            'elem_crystal', 'elem_storm', 'elem_metal', 'elem_nature', 'elem_light',
+                            'elem_dark', 'elem_steam', 'elem_mud', 'elem_lava_beast', 'elem_aurora',
+                            'elem_prism', 'elem_fusion', 'elem_boss'],
+        'blind_box_war': ['basic', 'soldier', 'mutant', 'elite', 'scout', 'flame_guard', 'frost_mage',
+                          'venom_stalker', 'thunder_bringer', 'void_walker', 'phantom_assassin',
+                          'healer', 'iron_fortress', 'mad_scientist', 'suicide_bomber',
+                          'sleep_emissary', 'paralyze_spider', 'energy_vampire', 'summon_master',
+                          'star_observer', 'gene_fusion', 'crystal_guardian', 'chaos_source', 'devourer'],
+    }
+
+    def _build_theme_enemies(self, theme_id, stage_num, count=8):
+        import random
+        pool = self.THEME_ENEMY_POOLS.get(theme_id, ['basic', 'soldier', 'mutant', 'elite'])
+        keys = random.sample(pool, min(count, len(pool)))
+        class _Dummy:
+            pass
+        dummy = _Dummy()
+        dummy.stage_num = stage_num
+        dummy.enemy_grid_size = 3
+        from challenge_factors import _mk_enemy_data
+        enemies = []
+        for i, key in enumerate(keys):
+            data = _mk_enemy_data(dummy, key, position=i)
+            if data:
+                enemies.append(data)
+        return enemies
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self._selected_theme = None
@@ -175,7 +213,6 @@ class ChallengeScreen(Screen):
             return
         import time
         app = App.get_running_app()
-        from battle_config import STAGES
         from gene_game import BattleSystem
         from screens.battle import BattleScreen
 
@@ -191,17 +228,16 @@ class ChallengeScreen(Screen):
 
         theme_info = next((t for t in self.THEMES if t['id'] == self._selected_theme), None)
         stage_num = theme_info['unlock'] if theme_info else 50
-        stage = STAGES.get(stage_num, STAGES.get(1))
         grid = dict(battle_screen._team)
-        enemy_data = [dict(e) for e in stage.get('enemies', [])]
+        enemy_data = self._build_theme_enemies(self._selected_theme, stage_num)
         if not enemy_data:
             enemy_data = [{'name': '挑战敌人', 'health': 200, 'attack': 20, 'defense': 10, 'speed': 12,
                            'skills': [], 'passive_abilities': [], 'width': 1, 'height': 1, 'position': 0}]
-        for e in enemy_data:
-            e['health'] = int(e['health'] * 1.2)
-            e['attack'] = int(e['attack'] * 1.2)
 
-        bs = BattleSystem(grid, enemy_data, stage_num=stage_num, skill_enhance_level=0)
+        selected_factors = dict((f['id'], f) for f in CHALLENGE_FACTORS if f['id'] in self._selected_factors)
+
+        bs = BattleSystem(grid, enemy_data, stage_num=stage_num, skill_enhance_level=0,
+                          challenge_factors=selected_factors)
         bs.is_running = True
         battle_screen._battle_system = bs
         battle_screen._battle_running = True
@@ -209,7 +245,7 @@ class ChallengeScreen(Screen):
         battle_screen._battle_mode = 'challenge'
         battle_screen._render_battle_grid()
         pts = sum(f['points'] for f in CHALLENGE_FACTORS if f['id'] in self._selected_factors)
-        battle_screen.add_log(f'[挑战] 主题:{theme_info["name"] if theme_info else "?"} 积分:{pts}')
+        battle_screen.add_log(f'[挑战] 主题:{theme_info["name"] if theme_info else "?"} 积分:{pts} 因子:{len(selected_factors)}个')
         self._challenge_start = time.time()
         self._challenge_pts = pts
         Clock.schedule_interval(battle_screen._battle_tick, 0.3)
