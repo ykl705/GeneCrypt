@@ -13,7 +13,7 @@ from gene_config import (
     CHROMOSOME_LENGTH, VITAL_GENES, SKILL_GENES, TRAIT_GENES,
     PASSIVE_GENES, THORNS_B_SEQUENCE, ASSASSIN_B_SEQUENCE, REFLEX_B_SEQUENCE
 )
-from gene_enhance_config import STAT_ENHANCE_REGIONS
+from gene_enhance_config import STAT_ENHANCE_REGIONS, STAT_GENE_SEGMENTS
 from trait_config import (
     TRAIT_CONFIG, INHERIT_CONFIG, METHYLATION_EFFECT,
     RECESSIVE_EXPRESS_CONDITION, RADIATION_CONFIG,
@@ -146,6 +146,7 @@ class Card:
     _stat_break_mult = 1.0
     _building_atk_mult = 1.0
     _training_bonus_mult = 1.0
+    _enhance_power = 1.0
     
     def __init__(self, name, gender=None, chromosomes=None, genes=None, parent_ids=None):
         Card.card_count += 1
@@ -208,6 +209,8 @@ class Card:
         for gene_name, _, _ in regions:
             tmpl = GENE_TEMPLATES.get(gene_name, {})
             seq = tmpl.get('sequence', 'ATGCATGC')
+            if random_dominance and tmpl.get('category') == 'stat':
+                seq = ''.join(random.choices(BASES, k=len(seq)))
             parts.append(seq)
             is_dominant[gene_name] = random.random() < 0.25 if random_dominance else True
         return ''.join(parts), is_dominant
@@ -650,10 +653,14 @@ class Card:
                 value_min = base_min
                 value_max = base_min + 1
 
-            base_value = sum(ord(b) for b in allele1['seq']) % (value_max - value_min) + value_min
+            base_value = sum(ord(b) for b in self._get_active_sequence(allele1, allele2, is_template_dominant)) % (value_max - value_min) + value_min
 
             if methylated:
                 base_value = int(base_value * METHYLATION_EFFECT['stat_factor'])
+
+            # 基因增强段：加算(特定碱基数量) + 乘算(特定碱基指数)
+            base_value = self._apply_gene_segments(trait_name, base_value,
+                                                   self._get_active_sequence(allele1, allele2, is_template_dominant))
 
             traits[trait_name] = base_value
 
@@ -666,6 +673,24 @@ class Card:
 
         self.base_traits = dict(traits)
         return traits
+
+    def _apply_gene_segments(self, trait_name, base_value, seq):
+        seg = STAT_GENE_SEGMENTS.get(trait_name)
+        if not seg or not seq:
+            return base_value
+        power = getattr(Card, '_enhance_power', 1.0)
+        add = seg.get('add')
+        if add:
+            sub = seq[add['start']:add['end']]
+            cnt = sub.count(add['base'])
+            base_value = base_value + int(cnt * add['per_base'] * power)
+        mul = seg.get('mul')
+        if mul:
+            sub = seq[mul['start']:mul['end']]
+            cnt = sub.count(mul['base'])
+            if cnt > 0:
+                base_value = int(base_value * ((1.0 + mul['per_base'] * power) ** cnt))
+        return max(0, base_value)
 
     def _apply_genome_enhancements(self, trait_name, base_value):
         regions = STAT_ENHANCE_REGIONS.get(trait_name, [])
@@ -1879,6 +1904,11 @@ class Game:
         sb_level = self.tech_tree.get('stat_break', {}).get('level', 0)
         Card._stat_break_mult = 1.0 + sb_level * 0.1
 
+        main_total = sum(1 for q in QUEST_DEFINITIONS if q['category'] == 'main')
+        main_claimed = sum(1 for qid in self.quest_claimed if qid.startswith('m_'))
+        progress = main_claimed / max(main_total, 1)
+        Card._enhance_power = 0.4 + 1.2 * progress
+
         self._sync_building_effects()
     
     def unlock_tech(self, tech_name):
@@ -2388,6 +2418,12 @@ class Game:
                 reward_msgs.append(f"奖励发放异常: {e}")
         self.quest_claimed.add(qid)
         self.quest_completed.discard(qid)
+        old_power = Card._enhance_power
+        self._sync_tech_effects()
+        if Card._enhance_power != old_power:
+            for card in self.cards:
+                if card.is_alive:
+                    card.traits = card.calculate_traits()
         return reward_msgs, None
 
     def _create_skill_reward_card(self, skill_names, quality=0.0):

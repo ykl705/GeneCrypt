@@ -1,6 +1,13 @@
-import random
-
-random.seed(42)
+# ============================================================
+# 基因增强段配置 - 数值基因内的加算/乘算片段
+#
+# 每个数值基因（10碱基）内部划分为两段：
+#   add段: 某一碱基越多 -> 加算值越高（平加）
+#   mul段: 某一碱基越多 -> 乘算倍率越高（(1+per_base)^count，在基础+加算之上指数上涨）
+#
+# 所有数值会乘以「任务推进强度」 Card._enhance_power：
+#   前期任务进度低 -> 增强段较弱；主线任务推进 -> 增强越来越强
+# ============================================================
 
 STAT_TRAITS = [
     'health', 'stamina', 'defense', 'dodge_rate',
@@ -12,94 +19,39 @@ CHR_LENGTHS = {'chr1': 1000, 'chr2': 1000, 'chr3': 1000, 'chrX': 700}
 
 BASE_CHOICES = ['A', 'T', 'G', 'C']
 
-# Additive patterns: per-base additive value (for all traits; health gets scaled up)
-ADD_PATTERNS = [
-    {'A': 1, 'T': -1},
-    {'A': -1, 'T': 1},
-    {'G': 1, 'C': -1},
-    {'G': -1, 'C': 1},
-    {'A': 1, 'G': -1},
-    {'A': -1, 'G': 1},
-    {'T': 1, 'C': -1},
-    {'T': -1, 'C': 1},
-    {'A': 1, 'C': -1},
-    {'T': 1, 'G': -1},
-]
-
-# Multiplicative patterns: per-base factor (applied after all addition)
-# Attack gets ~1.2x, other traits get smaller factors
-MUL_PATTERNS = {
-    'attack': [
-        {'A': 1.20, 'T': 0.90},
-        {'G': 1.15, 'C': 0.88},
-    ],
-    'health': [
-        {'C': 1.08, 'A': 0.95},
-    ],
-    'stamina': [
-        {'G': 1.06, 'C': 0.94},
-    ],
-    'defense': [
-        {'A': 1.05, 'T': 0.95},
-    ],
-    'dodge_rate': [
-        {'C': 1.04, 'G': 0.96},
-    ],
-    'speed': [
-        {'T': 1.07, 'A': 0.93},
-    ],
-    'critical_rate': [
-        {'G': 1.05, 'C': 0.95},
-    ],
+# 增强段定义：每个数值基因内部两段各5个碱基
+# add: {'base': 碱基, 'start': 基因内偏移, 'end': 基因内偏移, 'per_base': 每个该碱基的加算值}
+# mul: {'base': 碱基, 'start': ..., 'end': ..., 'per_base': 每个该碱基的乘算倍率}
+STAT_GENE_SEGMENTS = {
+    'attack': {
+        'add': {'base': 'A', 'start': 0, 'end': 5, 'per_base': 4},
+        'mul': {'base': 'C', 'start': 5, 'end': 10, 'per_base': 0.05},
+    },
+    'health': {
+        'add': {'base': 'A', 'start': 0, 'end': 5, 'per_base': 12},
+        'mul': {'base': 'C', 'start': 5, 'end': 10, 'per_base': 0.04},
+    },
+    'defense': {
+        'add': {'base': 'G', 'start': 0, 'end': 5, 'per_base': 2},
+        'mul': {'base': 'C', 'start': 5, 'end': 10, 'per_base': 0.04},
+    },
+    'speed': {
+        'add': {'base': 'T', 'start': 0, 'end': 5, 'per_base': 1},
+        'mul': {'base': 'C', 'start': 5, 'end': 10, 'per_base': 0.04},
+    },
+    'stamina': {
+        'add': {'base': 'G', 'start': 0, 'end': 5, 'per_base': 4},
+        'mul': {'base': 'C', 'start': 5, 'end': 10, 'per_base': 0.03},
+    },
+    'critical_rate': {
+        'add': {'base': 'C', 'start': 0, 'end': 5, 'per_base': 1},
+        'mul': {'base': 'G', 'start': 5, 'end': 10, 'per_base': 0.04},
+    },
+    'dodge_rate': {
+        'add': {'base': 'T', 'start': 0, 'end': 5, 'per_base': 1},
+        'mul': {'base': 'G', 'start': 5, 'end': 10, 'per_base': 0.04},
+    },
 }
 
-
-def _generate_enhancements():
-    regions = {trait: [] for trait in STAT_TRAITS}
-    counts = {t: 3 if t == 'attack' else 2 for t in STAT_TRAITS}
-    add_idx = 0
-
-    for trait in STAT_TRAITS:
-        # Generate additive regions (no mul key)
-        for _ in range(counts[trait]):
-            chr_id = random.choice(CHROMOSOMES)
-            max_len = CHR_LENGTHS[chr_id]
-            padding_start = 120 if chr_id != 'chrX' else 90
-            region_len = random.randint(40, 70)
-            start = random.randint(padding_start, max_len - region_len - 10)
-            end = start + region_len
-
-            add = ADD_PATTERNS[add_idx % len(ADD_PATTERNS)]
-            add_idx += 1
-
-            if trait == 'health':
-                add = {k: v * 50 for k, v in add.items()}
-
-            regions[trait].append({
-                'chr': chr_id,
-                'start': start,
-                'end': end,
-                'add': add,
-            })
-
-        # Generate multiplicative regions (no add key) — short regions to avoid runaway
-        mul_list = MUL_PATTERNS.get(trait, [])
-        for mul in mul_list:
-            chr_id = random.choice(CHROMOSOMES)
-            max_len = CHR_LENGTHS[chr_id]
-            padding_start = 120 if chr_id != 'chrX' else 90
-            region_len = random.randint(20, 35)
-            start = random.randint(padding_start, max_len - region_len - 10)
-            end = start + region_len
-
-            regions[trait].append({
-                'chr': chr_id,
-                'start': start,
-                'end': end,
-                'mul': mul,
-            })
-
-    return regions
-
-
-STAT_ENHANCE_REGIONS = _generate_enhancements()
+# 兼容旧代码：保留 STAT_ENHANCE_REGIONS 为空（旧padding随机段已弃用）
+STAT_ENHANCE_REGIONS = {t: [] for t in STAT_TRAITS}

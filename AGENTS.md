@@ -78,8 +78,14 @@ python -c "import sys; sys.path.insert(0,'.'); import gene_config as gc, gene_en
   Engine exceptions caught+logged, never crash battle.
 - Genome quality system: `Card.genome_quality` scored from dominant
   stat/skill/gacha genes (vital excluded, recessive inverted, chrG ×1.0).
-  Random cards get 25% allele dominance; breeding mutation can flip
-  dominance (35% on gene mutation). Selective breeding climbs quality.
+  Random cards get 25% allele dominance + random stat-gene sequences;
+  breeding mutation can flip dominance (35% on gene mutation).
+- Gene enhancement segments (`STAT_GENE_SEGMENTS` in
+  gene_enhance_config.py): each 10-base stat gene has an add segment
+  (base count × per_base flat, e.g. A×4 ATK) + mul segment (per-base
+  multiplier exponential, e.g. 1.05^C) applied on base+add. Strength
+  scales with main-quest progress: `Card._enhance_power = 0.4 + 1.2×(main claimed/40)`
+  (0.4 early → 1.6 at quest 40). Inherited via genome crossover.
 - `calculate_traits` = `_compute_base_traits` (genome + QUALITY_EXPONENTS:
   atk 8.5 / hp 7.5 / def 4.5 / spd 4.0) + multipliers (star/modules/equip/
   sets/stat_break/genome_boost/building). Reward cards keep deterministic
@@ -98,7 +104,8 @@ python -c "import sys; sys.path.insert(0,'.'); import gene_config as gc, gene_en
 
 ## Known Issues
 - `_optimize_genome` / `_apply_genome_enhancements` still read padding —
-  enhancements no longer applied in `_compute_base_traits`; `genome_boost`
-  tech instead multiplies stats directly in `calculate_traits`.
+  old padding-randomizing logic replaced by STAT_GENE_SEGMENTS
+  (in-gene add/mul segments); `genome_boost` tech instead multiplies
+  stats directly in `calculate_traits`.
 - Desktop-only `card_creator.py` and `gene_game_PC版.py` are untracked
   dev tools (tkinter) — excluded from APK build; don't commit them.
