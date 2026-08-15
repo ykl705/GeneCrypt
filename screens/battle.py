@@ -41,6 +41,8 @@ class BattleScreen(Screen):
         controls.add_widget(self._infinity_btn)
         self._exit_btn = Button(text='退出战斗', on_press=lambda _: self._exit_battle())
         controls.add_widget(self._exit_btn)
+        help_btn = Button(text='?', size_hint_x=0.06, on_press=lambda _: self._show_help())
+        controls.add_widget(help_btn)
         main.add_widget(controls)
 
         self._battle_area = BoxLayout(orientation='vertical', size_hint_y=0.6, spacing=dp(5))
@@ -863,6 +865,18 @@ class BattleScreen(Screen):
             app.game.save_game()
             self.add_log(f'[挑战] 完成! 得分:{ci["points"]} 用时:{mins:02d}:{secs:02d}')
         self._battle_mode = 'campaign'
+
+    def _show_help(self):
+        from screens.guide import show_help
+        show_help('战斗帮助',
+                  '1. 「选择关卡」+「选择队伍」(最多5张) → 「开始战斗」\n'
+                  '2. 战斗自动进行，速度决定行动频率，技能随机释放\n'
+                  '3. 伤害=攻击-防御，保底15%伤害\n'
+                  '4. 中毒/灼烧/流血持续掉血；睡眠/麻痹/冻结无法行动\n'
+                  '5. BOSS是多格单位，普攻命中我方全体\n'
+                  '6. 50关后敌人随机获得特质，里程碑关敌人有额外强化\n'
+                  '7. 「无限模式」：层数越深敌人越强(+15%/层)\n'
+                  '8. 完整说明见「指引」页签')
 
     def add_log(self, msg):
         self._log.add_widget(Label(text=str(msg), size_hint_y=None, height=dp(20),

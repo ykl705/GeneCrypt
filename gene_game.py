@@ -929,6 +929,8 @@ class Game:
         self.infinity_floor = 0
         self.pvp_rating = 0
         self.pvp_record = {}
+        self.dungeon_wins = 0
+        self.tutorial_seen = False
         self.breeding_queue = []
         self.tech_tree = self._copy_tech_tree()
         self.breed_speed_multiplier = 1.0
@@ -2155,6 +2157,7 @@ class Game:
         self.pvp_rating = 0
         self.pvp_record = {}
         self.dungeon_wins = 0
+        self.tutorial_seen = False
         self._sync_tech_effects()
         self.create_initial_cards()
         self._init_quests()
@@ -2481,6 +2484,7 @@ class Game:
                 'pvp_rating': self.pvp_rating,
                 'pvp_record': self.pvp_record,
                 'dungeon_wins': self.dungeon_wins,
+                'tutorial_seen': self.tutorial_seen,
                 'last_save_time': time.time(),
             }
             tmp = self.SAVE_FILE + '.tmp'
@@ -2542,6 +2546,7 @@ class Game:
             self.pvp_rating = save_data.get('pvp_rating', 0)
             self.pvp_record = save_data.get('pvp_record', {})
             self.dungeon_wins = save_data.get('dungeon_wins', 0)
+            self.tutorial_seen = save_data.get('tutorial_seen', False)
             Card.card_count = save_data.get('card_count', len(self.cards))
             
             old_ver = save_data.get('save_version', 0)

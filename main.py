@@ -94,6 +94,7 @@ try:
     from screens.equipment import EquipmentScreen
     from screens.base_building import BaseBuildingScreen
     from screens.achievement import AchievementScreen
+    from screens.guide import GuideScreen
     log_error('Screen imports OK')
 except Exception as e:
     log_error(f'Screen import error: {e}\n{traceback.format_exc()}')
@@ -172,6 +173,7 @@ class GeneCryptApp(App):
             ('基建', BaseBuildingScreen),
             ('装备', EquipmentScreen),
             ('成就', AchievementScreen),
+            ('指引', GuideScreen),
             ('控制台', DebugConsole),
         ]
         
@@ -353,6 +355,26 @@ class GeneCryptApp(App):
                 from kivy.uix.label import Label
                 Popup(title='离线收益', content=Label(text=f'精华提炼厂离线产出: 精华+{gain}'),
                       size_hint=(0.5, 0.25)).open()
+            if not getattr(self.game, 'tutorial_seen', True):
+                self.game.tutorial_seen = True
+                self.game.save_game()
+                from screens.guide import GUIDE_SECTIONS
+                from kivy.uix.scrollview import ScrollView
+                box = BoxLayout(orientation='vertical', spacing=dp(6), padding=dp(12))
+                sv = ScrollView(size_hint_y=1)
+                inner = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(4))
+                inner.bind(minimum_height=inner.setter('height'))
+                for line in GUIDE_SECTIONS[0]['lines'] + ['', '完整说明请看「指引」页签']:
+                    lbl = Label(text=line, size_hint_y=None, height=dp(28), halign='left',
+                                color=(0.9, 0.9, 0.9, 1))
+                    lbl.bind(size=lambda *_: setattr(lbl, 'text_size', lbl.size))
+                    inner.add_widget(lbl)
+                sv.add_widget(inner)
+                box.add_widget(sv)
+                box.add_widget(Button(text='开始冒险!', size_hint_y=None, height=dp(44),
+                                      on_press=lambda _: popup.dismiss()))
+                popup = Popup(title='欢迎来到 GeneCrypt!', content=box, size_hint=(0.9, 0.65))
+                popup.open()
         else:
             self._login_status.text = msg
 

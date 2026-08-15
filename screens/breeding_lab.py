@@ -37,6 +37,8 @@ class BreedingLabScreen(Screen):
         btn_row.add_widget(self._breed_btn)
         self._auto_btn = Button(text='自动繁殖: OFF', on_press=lambda _: self._toggle_auto())
         btn_row.add_widget(self._auto_btn)
+        help_btn = Button(text='?', size_hint_x=0.12, on_press=lambda _: self._show_help())
+        btn_row.add_widget(help_btn)
         main.add_widget(btn_row)
 
         ivf = BoxLayout(orientation='horizontal', size_hint_y=0.08, spacing=dp(5))
@@ -152,6 +154,18 @@ class BreedingLabScreen(Screen):
         app.game.auto_breeding = not app.game.auto_breeding
         self._auto_btn.text = '自动繁殖: ON' if app.game.auto_breeding else '自动繁殖: OFF'
         app.game.save_game()
+
+    def _show_help(self):
+        from screens.guide import show_help
+        show_help('繁殖帮助',
+                  '1. 选一雄一雌 → 开始繁殖（30秒基础时长）\n'
+                  '2. 子代交叉互换父母基因，5%突变（科技可提高）\n'
+                  '3. 突变有35%几率产生新的显性基因\n'
+                  '4. 基因组质量：显性基因越多越高，属性随质量指数成长\n'
+                  '5. 选育技巧：保留高质量子代继续配种，质量代代攀升\n'
+                  '6. 不同父母配种有杂交优势(攻防血+15%)\n'
+                  '7. 开启自动繁殖可挂机育种\n'
+                  '8. 完整说明见「指引」页签')
 
     def _extract_gamete(self, as_male):
         app = App.get_running_app()

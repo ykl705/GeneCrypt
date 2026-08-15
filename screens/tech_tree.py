@@ -16,8 +16,10 @@ class TechTreeScreen(Screen):
 
     def _build_ui(self):
         main = BoxLayout(orientation='vertical', spacing=dp(5), padding=dp(10))
-        title = Label(text='科技树', size_hint_y=0.06, bold=True, color=(1, 1, 1, 1))
-        main.add_widget(title)
+        head = BoxLayout(orientation='horizontal', size_hint_y=0.06, spacing=dp(6))
+        head.add_widget(Label(text='科技树', bold=True, color=(1, 1, 1, 1)))
+        head.add_widget(Button(text='?', size_hint_x=0.12, on_press=lambda _: self._show_help()))
+        main.add_widget(head)
 
         self._info_bar = BoxLayout(orientation='horizontal', size_hint_y=0.04, spacing=dp(10))
         self._info_bar.add_widget(Label(text='材料:', color=(0.6, 1, 0.6, 1)))
@@ -38,6 +40,17 @@ class TechTreeScreen(Screen):
 
     def on_enter(self):
         self._refresh()
+
+    def _show_help(self):
+        from screens.guide import show_help
+        show_help('科技树帮助',
+                  '1. 6大分支：核心/育种/变异/基因编辑/强化/后勤\n'
+                  '2. 升级消耗🧱材料+🧬密钥，部分需前置科技等级\n'
+                  '3. 推荐优先：胚胎工程→快速繁殖→自动繁殖\n'
+                  '4. 强化分支：基因组强化(属性x1.2~1.6)、破限(x1.1~1.3)\n'
+                  '5. 变异分支：进化增强(突变率+5%/级)\n'
+                  '6. 后勤：卡牌仓库(卡位+)、精灵(战后自动掉卡)\n'
+                  '7. 完整说明见「指引」页签')
 
     def _refresh(self):
         self._tree_box.clear_widgets()

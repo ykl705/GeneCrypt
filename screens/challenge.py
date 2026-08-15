@@ -71,14 +71,28 @@ class ChallengeScreen(Screen):
 
     def _build_ui(self):
         main = BoxLayout(orientation='vertical', spacing=dp(5), padding=dp(10))
-        title = Label(text='主题挑战', size_hint_y=0.06, bold=True, color=(1, 0.85, 0, 1))
-        main.add_widget(title)
+        head = BoxLayout(orientation='horizontal', size_hint_y=0.06, spacing=dp(5))
+        head.add_widget(Label(text='主题挑战', bold=True, color=(1, 0.85, 0, 1)))
+        head.add_widget(Button(text='?', size_hint_x=0.12, on_press=lambda _: self._show_help()))
+        main.add_widget(head)
         sv = ScrollView(size_hint_y=1)
         self._content = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(5))
         self._content.bind(minimum_height=self._content.setter('height'))
         sv.add_widget(self._content)
         main.add_widget(sv)
         self.add_widget(main)
+
+    def _show_help(self):
+        from screens.guide import show_help
+        show_help('主题挑战帮助',
+                  '1. 5个主题随主线解锁，各有专属敌人\n'
+                  '2. 勾选挑战因子增加难度与积分（共118个）\n'
+                  '3. 因子全部真实生效：敌方强化/巨石/虫群/盲盒/五波攻势等\n'
+                  '4. 积分越高越难，记录最高分与用时\n'
+                  '5. 互斥因子只能选一个；「一键全选」会自动避开互斥\n'
+                  '6. 隐藏成就：挑战无损/60秒速通/盲盒全因子\n'
+                  '7. 挑战胜利不影响主线进度\n'
+                  '8. 完整说明见「指引」页签')
 
     def on_enter(self):
         self._show_themes()
