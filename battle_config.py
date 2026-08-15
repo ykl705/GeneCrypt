@@ -1654,9 +1654,9 @@ def _generate_stages():
         elif stage_num <= 98:
             enemy_config = [('mech_god', 2), ('bone_dragon', 2), ('guardian_spirit', 1)]
         elif stage_num == 99:
-            enemy_config = [('void_destroyer', 1), ('mech_god', 1), ('rock', 1)]
-        else:
             enemy_config = [('void_destroyer', 2), ('mech_god', 1), ('rock', 1)]
+        else:
+            enemy_config = [('void_destroyer', 3), ('mech_god', 2), ('rock', 1)]
 
         # Boss stages every 5 for stages 31-100
         if stage_num >= 31 and stage_num % 5 == 0:

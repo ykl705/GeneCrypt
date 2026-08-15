@@ -411,29 +411,38 @@ class CardLibraryScreen(Screen):
             a2d = gdata.get('allele2', {}).get('is_dominant', False)
             inner.add_widget(Label(text=f'  {gname}: {"显" if a1d else "隐"}/{"显" if a2d else "隐"}',
                                    size_hint_y=None, height=dp(20), color=(0.8, 0.8, 1, 1)))
-        inner.add_widget(Label(text='--- 数值基因增强段 ---', bold=True, size_hint_y=None, height=dp(25),
+        inner.add_widget(Label(text='--- 基因增强区域 ---', bold=True, size_hint_y=None, height=dp(25),
                                color=(0, 0.85, 1, 1)))
-        from gene_enhance_config import STAT_GENE_SEGMENTS
+        from gene_enhance_config import STAT_ENHANCE_REGIONS
         from gene_game import Card as _Card
         power = getattr(_Card, '_enhance_power', 1.0)
         trait_names = {'attack': '攻击', 'health': '生命', 'defense': '防御', 'speed': '速度',
                        'stamina': '耐力', 'critical_rate': '暴击', 'dodge_rate': '闪避'}
-        for trait_name, seg in STAT_GENE_SEGMENTS.items():
-            gdata = card.genes.get(trait_name)
-            if not gdata:
+        for trait_name, regions in STAT_ENHANCE_REGIONS.items():
+            if not regions:
                 continue
-            seq = card._get_active_sequence(gdata['allele1'], gdata['allele2'],
-                                            gdata.get('template_dominant', True))
-            txt = f'  {trait_names.get(trait_name, trait_name)}: '
-            if seg.get('add'):
-                a = seg['add']
-                sub = seq[a['start']:a['end']]
-                txt += f'{a["base"]}x{sub.count(a["base"])} → +{int(sub.count(a["base"]) * a["per_base"] * power)} '
-            if seg.get('mul'):
-                m = seg['mul']
-                sub = seq[m['start']:m['end']]
-                txt += f'{m["base"]}x{sub.count(m["base"])} → x{(1.0 + m["per_base"] * power) ** sub.count(m["base"]):.2f}'
-            inner.add_widget(Label(text=txt, size_hint_y=None, height=dp(20), color=(0.9, 0.9, 0.5, 1)))
+            inner.add_widget(Label(text=f'  [{trait_names.get(trait_name, trait_name)}]',
+                                   size_hint_y=None, height=dp(20), color=(0.9, 0.9, 0.5, 1)))
+            for region in regions:
+                chr_id = region['chr']
+                start = region['start']
+                end = region['end']
+                rules = region.get('add') or region.get('mul')
+                kind = '加算' if 'add' in region else '乘算'
+                homologs = card.chromosomes.get(chr_id, [])
+                counts = {}
+                for h in homologs:
+                    genome = h.get('genome', '')
+                    if start < len(genome):
+                        for b in (genome[start:min(end, len(genome))]):
+                            counts[b] = counts.get(b, 0) + 1
+                parts = ' '.join(f'{b}x{counts.get(b, 0)}' for b in rules if counts.get(b, 0))
+                if not parts:
+                    parts = '无匹配碱基'
+                rule_txt = ' '.join(f'{b}{v:+.2f}' if kind == '加算' else f'{b}x{v:.3f}' for b, v in rules.items())
+                inner.add_widget(Label(
+                    text=f'    {chr_id}[{start}-{end}] {kind} {rule_txt} | 本卡: {parts}',
+                    size_hint_y=None, height=dp(20), color=(0.7, 0.7, 0.7, 1)))
         inner.add_widget(Label(text=f'  任务推进强度: x{power:.2f}（随主线任务提升）',
                                size_hint_y=None, height=dp(20), color=(0.6, 0.6, 0.6, 1)))
         close_btn = Button(text='关闭', size_hint_y=None, height=dp(40))

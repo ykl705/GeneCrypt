@@ -13,7 +13,7 @@ from gene_config import (
     CHROMOSOME_LENGTH, VITAL_GENES, SKILL_GENES, TRAIT_GENES,
     PASSIVE_GENES, THORNS_B_SEQUENCE, ASSASSIN_B_SEQUENCE, REFLEX_B_SEQUENCE
 )
-from gene_enhance_config import STAT_ENHANCE_REGIONS, STAT_GENE_SEGMENTS
+from gene_enhance_config import STAT_ENHANCE_REGIONS
 from trait_config import (
     TRAIT_CONFIG, INHERIT_CONFIG, METHYLATION_EFFECT,
     RECESSIVE_EXPRESS_CONDITION, RADIATION_CONFIG,
@@ -130,10 +130,10 @@ def _reward_traits_formula(quality):
 
 # 质量对属性成长指数：繁殖卡 base × (1+q)^exp
 QUALITY_EXPONENTS = {
-    'attack': 8.5,
-    'health': 7.5,
-    'defense': 4.5,
-    'speed': 4.0,
+    'attack': 8.0,
+    'health': 7.0,
+    'defense': 4.0,
+    'speed': 3.5,
 }
 
 
@@ -658,11 +658,12 @@ class Card:
             if methylated:
                 base_value = int(base_value * METHYLATION_EFFECT['stat_factor'])
 
-            # 基因增强段：加算(特定碱基数量) + 乘算(特定碱基指数)
-            base_value = self._apply_gene_segments(trait_name, base_value,
-                                                   self._get_active_sequence(allele1, allele2, is_template_dominant))
-
             traits[trait_name] = base_value
+
+        # 基因增强区域（跨染色体长片段）：加算 + 乘算
+        for trait_name in list(traits.keys()):
+            if trait_name in STAT_ENHANCE_REGIONS:
+                traits[trait_name] = self._apply_genome_enhancements(trait_name, traits[trait_name])
 
         # Quality scaling: 繁殖卡属性随基因组质量指数成长
         q = getattr(self, 'genome_quality', 0.0) or 0.0
@@ -674,60 +675,40 @@ class Card:
         self.base_traits = dict(traits)
         return traits
 
-    def _apply_gene_segments(self, trait_name, base_value, seq):
-        seg = STAT_GENE_SEGMENTS.get(trait_name)
-        if not seg or not seq:
-            return base_value
-        power = getattr(Card, '_enhance_power', 1.0)
-        add = seg.get('add')
-        if add:
-            sub = seq[add['start']:add['end']]
-            cnt = sub.count(add['base'])
-            base_value = base_value + int(cnt * add['per_base'] * power)
-        mul = seg.get('mul')
-        if mul:
-            sub = seq[mul['start']:mul['end']]
-            cnt = sub.count(mul['base'])
-            if cnt > 0:
-                base_value = int(base_value * ((1.0 + mul['per_base'] * power) ** cnt))
-        return max(0, base_value)
-
     def _apply_genome_enhancements(self, trait_name, base_value):
         regions = STAT_ENHANCE_REGIONS.get(trait_name, [])
         if not regions:
             return base_value
-        
-        total_add = 0
+        power = getattr(Card, '_enhance_power', 1.0)
+        total_add = 0.0
         total_mul = 1.0
-        
         for region in regions:
             chr_id = region['chr']
             start = region['start']
             end = region['end']
             add_rules = region.get('add', {})
             mul_rules = region.get('mul', {})
-            
             homologs = self.chromosomes.get(chr_id, [{}, {}])
             for homolog in homologs:
                 genome = homolog.get('genome', '')
-                if start >= len(genome):
+                if not genome or start >= len(genome):
                     continue
-                actual_end = min(end, len(genome))
-                seq = genome[start:actual_end]
-                
+                seq = genome[start:min(end, len(genome))]
                 if add_rules:
                     for base, val in add_rules.items():
-                        total_add += seq.count(base) * val
-                
+                        total_add += seq.count(base) * val * power
                 if mul_rules:
                     for base, factor in mul_rules.items():
-                        count = seq.count(base)
-                        if count > 0:
-                            total_mul *= factor ** count
-        
-        result = int(round((base_value + total_add) * total_mul * Card._genome_boost_mult))
-        return max(1, result)
-    
+                        cnt = seq.count(base)
+                        if cnt <= 0:
+                            continue
+                        if factor >= 1.0:
+                            total_mul *= (1.0 + (factor - 1.0) * power) ** cnt
+                        else:
+                            total_mul *= (1.0 - (1.0 - factor) * power) ** cnt
+        result = (base_value + total_add) * total_mul
+        return max(0, int(round(result)))
+
     def _get_active_sequence(self, allele1, allele2, is_template_dominant):
         a1_is_dominant = allele1.get('is_dominant', True)
         a2_is_dominant = allele2.get('is_dominant', True)

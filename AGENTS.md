@@ -80,12 +80,15 @@ python -c "import sys; sys.path.insert(0,'.'); import gene_config as gc, gene_en
   stat/skill/gacha genes (vital excluded, recessive inverted, chrG ×1.0).
   Random cards get 25% allele dominance + random stat-gene sequences;
   breeding mutation can flip dominance (35% on gene mutation).
-- Gene enhancement segments (`STAT_GENE_SEGMENTS` in
-  gene_enhance_config.py): each 10-base stat gene has an add segment
-  (base count × per_base flat, e.g. A×4 ATK) + mul segment (per-base
-  multiplier exponential, e.g. 1.05^C) applied on base+add. Strength
-  scales with main-quest progress: `Card._enhance_power = 0.4 + 1.2×(main claimed/40)`
-  (0.4 early → 1.6 at quest 40). Inherited via genome crossover.
+- Gene enhancement regions (`STAT_ENHANCE_REGIONS` in
+  gene_enhance_config.py): long regions (add 40-70 bases, mul 20-35 bases)
+  placed in the padding AFTER genes on chr1/chr2/chr3/chrX (many chromosome
+  pairs, both homologs count). Add rules = per-base flat values (positive
+  + negative bases); mul rules = per-base exponential factors (e.g.
+  1.04^C) applied on base+add. Strength scales with main-quest progress:
+  `Card._enhance_power = 0.4 + 1.2×(main claimed/40)` (0.4 early → 1.6 at
+  quest 40). Padding bases are random per card and inherited via genome
+  crossover — breeding concentrates good regions.
 - `calculate_traits` = `_compute_base_traits` (genome + QUALITY_EXPONENTS:
   atk 8.5 / hp 7.5 / def 4.5 / spd 4.0) + multipliers (star/modules/equip/
   sets/stat_break/genome_boost/building). Reward cards keep deterministic
