@@ -4,6 +4,7 @@ from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.uix.textinput import TextInput
 from kivy.uix.popup import Popup
+from kivy.uix.scrollview import ScrollView
 from kivy.app import App
 from kivy.metrics import dp
 from kivy.clock import Clock
@@ -20,6 +21,10 @@ SKILL_CODES = {
 }
 REV_SKILL_CODES = {v:k for k,v in SKILL_CODES.items()}
 
+from gene_config import PVP_TIERS, PVP_TIER_SKILLS
+TIER_SKILLS = PVP_TIER_SKILLS
+
+
 def encode_team(team):
     parts = []
     for pos, card in sorted(team.items()):
@@ -28,6 +33,7 @@ def encode_team(team):
         sk = ','.join(SKILL_CODES.get(s, s[:3]) for s in card.skills[:4])
         parts.append(f'{pos}|{bl[:2]:>2}|{st}|{sk}')
     return ';'.join(parts)
+
 
 def decode_team(code):
     team = {}
@@ -42,8 +48,10 @@ def decode_team(code):
             skills = [REV_SKILL_CODES.get(s, s) for s in segs[3].split(',') if s]
         except:
             raise ValueError(f'Parse error: {p}')
-        if pos < 0 or pos > 8: raise ValueError(f'Bad position: {pos}')
-        if star < 1 or star > 5: raise ValueError(f'Bad star: {star}')
+        if pos < 0 or pos > 8:
+            raise ValueError(f'Bad position: {pos}')
+        if star < 1 or star > 5:
+            raise ValueError(f'Bad star: {star}')
         team[pos] = {'bloodline': bl if bl != 'XX' else '', 'star': star, 'skills': skills}
     return team
 
@@ -54,67 +62,134 @@ class PvPScreen(Screen):
         self._build_ui()
 
     def _build_ui(self):
-        main = BoxLayout(orientation='vertical', spacing=dp(8), padding=dp(10))
-        main.add_widget(Label(text='PvP对决', size_hint_y=0.05, bold=True, color=(1,0.6,0,1)))
-
-        main.add_widget(Label(text='我的队伍代码', size_hint_y=None, height=dp(20), color=(0.8,0.8,0.8,1)))
-        r1 = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(38), spacing=dp(5))
-        self._my_code = TextInput(text='', multiline=False, size_hint_x=0.7, hint_text='点击生成导出代码...')
-        r1.add_widget(self._my_code)
-        r1.add_widget(Button(text='生成', size_hint_x=0.3, on_press=lambda _: self._export_team()))
-        main.add_widget(r1)
-
-        main.add_widget(Label(text='对手A代码', size_hint_y=None, height=dp(20), color=(1,0.5,0.5,1)))
-        self._code_a = TextInput(text='', multiline=False, size_hint_y=None, height=dp(38))
-        main.add_widget(self._code_a)
-
-        main.add_widget(Label(text='对手B代码', size_hint_y=None, height=dp(20), color=(0.5,0.5,1,1)))
-        self._code_b = TextInput(text='', multiline=False, size_hint_y=None, height=dp(38))
-        main.add_widget(self._code_b)
-
-        btn_row = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(44), spacing=dp(10))
-        btn_row.add_widget(Button(text='A vs B 对决!', on_press=lambda _: self._start_pvp()))
-        main.add_widget(btn_row)
-        self._result_lbl = Label(text='', size_hint_y=1, color=(1,1,0.6,1))
-        main.add_widget(self._result_lbl)
+        main = BoxLayout(orientation='vertical', spacing=dp(6), padding=dp(10))
+        main.add_widget(Label(text='PvP竞技场', size_hint_y=0.05, bold=True, color=(1, 0.6, 0, 1)))
+        self._rating_lbl = Label(text='', size_hint_y=None, height=dp(24), color=(1, 1, 0.6, 1))
+        main.add_widget(self._rating_lbl)
+        sv = ScrollView(size_hint_y=1)
+        self._tier_box = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(6))
+        self._tier_box.bind(minimum_height=self._tier_box.setter('height'))
+        sv.add_widget(self._tier_box)
+        main.add_widget(sv)
+        self._code_btn = Button(text='代码对决 (A vs B 模拟)', size_hint_y=None, height=dp(40),
+                                on_press=lambda _: self._show_code_duel())
+        main.add_widget(self._code_btn)
         self.add_widget(main)
 
-    def _export_team(self):
+    def on_enter(self):
+        self._refresh()
+
+    def _refresh(self):
+        app = App.get_running_app()
+        game = app.game
+        self._rating_lbl.text = f'段位分: {game.pvp_rating}  |  胜利场次: {sum(game.pvp_record.values())}'
+        self._tier_box.clear_widgets()
+        for tier in PVP_TIERS:
+            locked = game.pvp_rating < tier['unlock_rating']
+            wins = game.pvp_record.get(tier['id'], 0)
+            txt = f'{tier["icon"]} {tier["name"]}段  (胜{wins})'
+            if locked:
+                txt += f'  [需{tier["unlock_rating"]}分解锁]'
+            btn = Button(text=txt, size_hint_y=None, height=dp(46),
+                         background_color=(0.6, 0.35, 0.1, 1) if not locked else (0.3, 0.3, 0.3, 1))
+            if locked:
+                btn.disabled = True
+            else:
+                btn.bind(on_press=lambda _, t=tier: self._start_ladder(t))
+            self._tier_box.add_widget(btn)
+
+    def _start_ladder(self, tier):
+        app = App.get_running_app()
+        bs = app._screen_refs.get('战斗')
+        if bs is None:
+            return
+        if not bs._team:
+            Popup(title='错误', content=Label(text='请先在战斗页编好队伍'), size_hint=(0.5, 0.25)).open()
+            return
+        from gene_game import Card, BattleSystem
+        bots = []
+        n_bots = 4 + PVP_TIERS.index(tier)
+        skills_pool = TIER_SKILLS[PVP_TIERS.index(tier)]
+        for i in range(min(n_bots, 5)):
+            b = Card(f'PvP-{tier["name"]}-{i}', 'male' if i % 2 else 'female')
+            b.genome_quality = tier['q']
+            b.traits = b.calculate_traits()
+            b.star = tier['stars']
+            b.traits = b.calculate_traits()
+            for k in ('attack', 'health', 'defense', 'speed'):
+                b.traits[k] = int(b.traits[k] * 1.5)
+            b.skills = random.sample(skills_pool, min(2, len(skills_pool)))
+            bots.append({
+                'name': b.name, 'health': b.traits['health'], 'attack': b.traits['attack'],
+                'defense': b.traits['defense'], 'speed': b.traits['speed'],
+                'skills': b.skills, 'passive_abilities': [], 'width': 1, 'height': 1, 'position': i,
+            })
+        bs2 = BattleSystem(dict(bs._team), bots, stage_num=30, skill_enhance_level=0)
+        bs2.is_running = True
+        bs._battle_system = bs2
+        bs._battle_running = True
+        bs._selected_stage = 30
+        bs._battle_mode = 'pvp_ladder'
+        bs._pvp_tier = tier
+        bs._challenge_info = None
+        bs._render_battle_grid()
+        bs.add_log(f'[PvP] {tier["icon"]}{tier["name"]}段位战开始! 对手实力 q={tier["q"]} ★{tier["stars"]}')
+        Clock.schedule_interval(bs._battle_tick, 0.3)
+        app.switch_tab('战斗')
+
+    def _show_code_duel(self):
+        content = BoxLayout(orientation='vertical', spacing=dp(6), padding=dp(10))
+        content.add_widget(Label(text='我的队伍代码', size_hint_y=None, height=dp(20), color=(0.8, 0.8, 0.8, 1)))
+        r1 = BoxLayout(orientation='horizontal', size_hint_y=None, height=dp(38), spacing=dp(5))
+        my_code = TextInput(text='', multiline=False, size_hint_x=0.7, hint_text='生成导出代码...')
+        r1.add_widget(my_code)
+        r1.add_widget(Button(text='生成', size_hint_x=0.3, on_press=lambda _: self._export_team(my_code)))
+        content.add_widget(r1)
+        content.add_widget(Label(text='对手A代码', size_hint_y=None, height=dp(20), color=(1, 0.5, 0.5, 1)))
+        code_a = TextInput(text='', multiline=False, size_hint_y=None, height=dp(38))
+        content.add_widget(code_a)
+        content.add_widget(Label(text='对手B代码', size_hint_y=None, height=dp(20), color=(0.5, 0.5, 1, 1)))
+        code_b = TextInput(text='', multiline=False, size_hint_y=None, height=dp(38))
+        content.add_widget(code_b)
+        duel_btn = Button(text='A vs B 对决!', size_hint_y=None, height=dp(44),
+                          on_press=lambda _: self._start_pvp(code_a.text.strip(), code_b.text.strip()))
+        content.add_widget(duel_btn)
+        popup = Popup(title='代码对决', content=content, size_hint=(0.9, 0.75))
+        popup.open()
+
+    def _export_team(self, my_code_input):
         app = App.get_running_app()
         bs = app._screen_refs.get('战斗')
         if not bs or not bs._team:
-            Popup(title='错误', content=Label(text='请先在战斗页编好队伍'), size_hint=(0.5,0.25)).open()
+            Popup(title='错误', content=Label(text='请先在战斗页编好队伍'), size_hint=(0.5, 0.25)).open()
             return
         code = encode_team(bs._team)
-        self._my_code.text = code
+        my_code_input.text = code
         try:
             from kivy.core.clipboard import Clipboard
             Clipboard.copy(code)
         except:
             pass
 
-    def _start_pvp(self):
-        ca = self._code_a.text.strip()
-        cb = self._code_b.text.strip()
+    def _start_pvp(self, ca, cb):
         if not ca or not cb:
-            self._result_lbl.text = '请填写双方代码'
             return
         try:
             team_a = decode_team(ca)
             team_b = decode_team(cb)
         except ValueError as e:
-            self._result_lbl.text = f'代码错误: {e}'
+            Popup(title='错误', content=Label(text=f'代码错误: {e}'), size_hint=(0.5, 0.25)).open()
             return
         app = App.get_running_app()
         bs = app._screen_refs.get('战斗')
         if bs is None:
             return
         from gene_game import Card, BattleSystem
-        import random
+
         def _build_cards(tm):
             cards = {}
             for pos, t in tm.items():
-                c = Card(f'PvP-{pos}', random.choice(['male','female']))
+                c = Card(f'PvP-{pos}', random.choice(['male', 'female']))
                 c.star = t.get('star', 1)
                 c.traits['attack'] = 45 + c.star * 30
                 c.traits['health'] = 180 + c.star * 100
@@ -143,6 +218,6 @@ class PvPScreen(Screen):
         bs._battle_mode = 'pvp'
         bs._challenge_info = None
         bs._render_battle_grid()
-        bs.add_log('[PvP] 对决开始!')
+        bs.add_log('[PvP] 代码对决开始!')
         Clock.schedule_interval(bs._battle_tick, 0.3)
         app.switch_tab('战斗')

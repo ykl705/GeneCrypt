@@ -927,6 +927,8 @@ class Game:
         self.max_cards = 20
         self.effective_max_cards = 20
         self.infinity_floor = 0
+        self.pvp_rating = 0
+        self.pvp_record = {}
         self.breeding_queue = []
         self.tech_tree = self._copy_tech_tree()
         self.breed_speed_multiplier = 1.0
@@ -2150,6 +2152,9 @@ class Game:
         self.base_buildings = {}
         self.gene_library = {}
         self.infinity_floor = 0
+        self.pvp_rating = 0
+        self.pvp_record = {}
+        self.dungeon_wins = 0
         self._sync_tech_effects()
         self.create_initial_cards()
         self._init_quests()
@@ -2285,6 +2290,14 @@ class Game:
                     p = max(self.challenge_scores.values(), key=lambda x: x.get('points', 0)).get('points', 0)
                 else:
                     p = 0
+            elif atype == 'infinity_floor':
+                p = self.infinity_floor
+            elif atype == 'pvp_rating':
+                p = self.pvp_rating
+            elif atype == 'dungeon_wins':
+                p = self.dungeon_wins
+            elif atype == 'max_quality':
+                p = int(max((getattr(c, 'genome_quality', 0) for c in self.cards), default=0) * 100)
             elif atype == 'hidden':
                 continue
             else:
@@ -2465,6 +2478,9 @@ class Game:
                 'equipment_inventory': self.equipment_inventory,
                 'base_buildings': self.base_buildings,
                 'infinity_floor': self.infinity_floor,
+                'pvp_rating': self.pvp_rating,
+                'pvp_record': self.pvp_record,
+                'dungeon_wins': self.dungeon_wins,
                 'last_save_time': time.time(),
             }
             tmp = self.SAVE_FILE + '.tmp'
@@ -2523,6 +2539,9 @@ class Game:
             self.equipment_inventory = save_data.get('equipment_inventory', {})
             self.base_buildings = save_data.get('base_buildings', {})
             self.infinity_floor = save_data.get('infinity_floor', 0)
+            self.pvp_rating = save_data.get('pvp_rating', 0)
+            self.pvp_record = save_data.get('pvp_record', {})
+            self.dungeon_wins = save_data.get('dungeon_wins', 0)
             Card.card_count = save_data.get('card_count', len(self.cards))
             
             old_ver = save_data.get('save_version', 0)

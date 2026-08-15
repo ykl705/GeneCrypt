@@ -39,7 +39,7 @@ class AchievementScreen(Screen):
             elif tp in ('total_wins','boss_kills','max_stage','no_loss_count'): cats['战斗'].append(a)
             elif tp in ('breed_count','bloodline_collect'): cats['繁殖'].append(a)
             elif tp in ('have_cards','module_collect'): cats['收集'].append(a)
-            elif tp in ('star_count','chip_equip','training_complete'): cats['养成'].append(a)
+            elif tp in ('star_count','chip_equip','training_complete','max_quality'): cats['养成'].append(a)
             else: cats['挑战'].append(a)
 
         done_count = sum(1 for a in ACHIEVEMENTS if a['id'] in game.achievements)

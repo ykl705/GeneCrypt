@@ -788,6 +788,18 @@ class BattleScreen(Screen):
             if mode == 'pvp':
                 self._reward_box.clear_widgets()
                 self._reward_box.add_widget(Label(text='[PvP] 对决胜利!（练习模式，无主线奖励）', color=(0.6, 1, 0.6, 1)))
+            elif mode == 'pvp_ladder':
+                tier = getattr(self, '_pvp_tier', None)
+                if tier:
+                    app.game.pvp_record[tier['id']] = app.game.pvp_record.get(tier['id'], 0) + 1
+                    app.game.pvp_rating += tier['rating_gain']
+                    app.game.battle_materials += tier['mats']
+                    app.game.gacha_currency += tier['gacha']
+                    self._reward_box.clear_widgets()
+                    self._reward_box.add_widget(Label(
+                        text=f'[PvP] {tier["name"]}段胜利! 段位分+{tier["rating_gain"]} 🧱+{tier["mats"]} 🧬+{tier["gacha"]}',
+                        color=(0.6, 1, 0.6, 1)))
+                self._pvp_tier = None
             elif mode == 'challenge':
                 mat_reward = 10 + stage_num // 2
                 app.game.battle_materials += mat_reward
@@ -798,6 +810,7 @@ class BattleScreen(Screen):
                 essence_reward = 2 + stage_num // 10
                 app.game.battle_materials += mat_reward
                 app.game.gene_essence += essence_reward
+                app.game.dungeon_wins = getattr(app.game, 'dungeon_wins', 0) + 1
                 self._reward_box.clear_widgets()
                 self._reward_box.add_widget(Label(text=f'[副本] 胜利! 🧱+{mat_reward} 精华+{essence_reward}', color=(0.6, 1, 0.6, 1)))
             elif mode == 'infinity':

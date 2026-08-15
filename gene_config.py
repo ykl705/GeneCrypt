@@ -981,10 +981,17 @@ ACHIEVEMENTS = [
     {'id':'a_chip_equip','name':'芯片初装', 'desc':'给卡牌装备技能芯片',     'type':'chip_equip','target':1,    'diff':1, 'reward':{'chip':'shield_chip'}},
     {'id':'a_module_all','name':'模组收藏家','desc':'拥有每种L3模组至少1个','type':'module_collect','target':4,'diff':3,'reward':{'gacha_currency':500,'gene_essence':150}},
     {'id':'a_training_all','name':'全面训练','desc':'一张卡牌4项属性均完成训练','type':'training_complete','target':1,'diff':2,'reward':{'battle_mats':100}},
-    {'id':'a_infinity_30','name':'无尽之始','desc':'挑战模式积分达2000','type':'challenge_score','target':2000,'diff':2,'reward':{'gacha_currency':300}},
+    {'id':'a_infinity_30','name':'无尽之始','desc':'无限模式达到第30层','type':'infinity_floor','target':30,'diff':2,'reward':{'gacha_currency':300}},
     {'id':'a_hidden_immortal','name':'不朽传奇','desc':'一张卡牌在挑战模式中战无不胜','type':'hidden','target':1,'diff':4,'reward':{'card':'不朽龙裔','gene_essence':500,'gacha_currency':1000}},
     {'id':'a_hidden_speed','name':'闪电战',  'desc':'60秒内完成一场挑战',    'type':'hidden','target':1,'diff':3,'reward':{'chip':'freeze_domain_chip','gene_essence':200}},
     {'id':'a_hidden_perfect','name':'完美无缺','desc':'全因子通关盲盒战争',  'type':'hidden','target':1,'diff':5,'reward':{'card':'完美基因体','gene_essence':2000,'gacha_currency':5000}},
+    {'id':'a_infinity_10','name':'无尽行者','desc':'无限模式达到第10层','type':'infinity_floor','target':10,'diff':1,'reward':{'battle_mats':150}},
+    {'id':'a_pvp_100','name':'竞技新星','desc':'PvP段位分达到100','type':'pvp_rating','target':100,'diff':2,'reward':{'gacha_currency':200}},
+    {'id':'a_pvp_600','name':'竞技之王','desc':'PvP段位分达到600','type':'pvp_rating','target':600,'diff':4,'reward':{'gacha_currency':1500,'gene_essence':300}},
+    {'id':'a_dungeon_5','name':'副本勇士','desc':'赢得5场副本战斗','type':'dungeon_wins','target':5,'diff':1,'reward':{'battle_mats':100}},
+    {'id':'a_dungeon_30','name':'副本大师','desc':'赢得30场副本战斗','type':'dungeon_wins','target':30,'diff':3,'reward':{'gacha_currency':400,'gene_essence':100}},
+    {'id':'a_quality_80','name':'基因大师','desc':'拥有一张基因组质量80以上的卡牌','type':'max_quality','target':80,'diff':3,'reward':{'gacha_currency':500,'gene_essence':150}},
+    {'id':'a_wins_500','name':'常胜将军','desc':'累计赢得500场战斗','type':'total_wins','target':500,'diff':4,'reward':{'gacha_currency':800,'gene_essence':200}},
 ]
 
 # ==========================================
@@ -1154,6 +1161,21 @@ EQUIPMENT_NAMES = {
 # ==========================================
 # 基建系统
 # ==========================================
+PVP_TIERS = [
+    {'id': 'bronze',   'name': '青铜', 'icon': '🥉', 'q': 0.30, 'unlock_rating': 0,   'rating_gain': 10, 'mats': 40,  'gacha': 5,  'stars': 1},
+    {'id': 'silver',   'name': '白银', 'icon': '🥈', 'q': 0.42, 'unlock_rating': 30,  'rating_gain': 15, 'mats': 80,  'gacha': 10, 'stars': 2},
+    {'id': 'gold',     'name': '黄金', 'icon': '🥇', 'q': 0.55, 'unlock_rating': 100, 'rating_gain': 22, 'mats': 140, 'gacha': 20, 'stars': 3},
+    {'id': 'platinum', 'name': '铂金', 'icon': '💠', 'q': 0.70, 'unlock_rating': 260, 'rating_gain': 35, 'mats': 220, 'gacha': 35, 'stars': 4},
+    {'id': 'diamond',  'name': '钻石', 'icon': '💎', 'q': 0.85, 'unlock_rating': 600, 'rating_gain': 60, 'mats': 350, 'gacha': 60, 'stars': 5},
+]
+PVP_TIER_SKILLS = [
+    ['火焰吐息', '冰霜护盾', '雷击', '毒液攻击', '自我修复', '能量护盾', '快速生长', '甘霖'],
+    ['火焰吐息', '冰霜护盾', '雷击', '毒液攻击', '自我修复', '能量护盾', '冻结', '诅咒', '灼烧', '甘霖', '快速生长'],
+    ['冻结', '诅咒', '灼烧', '处决', '毒雾扩散', '时光倒流', '亡灵复苏', '甘霖', '澎湃', '能量吸收'],
+    ['处决', '毒雾扩散', '时光倒流', '亡灵复苏', '剧毒新星', '炼狱之火', '血之渴望', '猩红风暴', '永冻领域', '状态共鸣'],
+    ['剧毒新星', '炼狱之火', '永冻领域', '绝对零度', '血之渴望', '猩红风暴', '万象终结', '状态共鸣', '处决', '时光倒流'],
+]
+
 BASE_BUILDINGS = [
     {'id':'gene_lab',    'name':'基因研究所', 'icon':'T', 'desc':'全局ATK+{bonus}%',     'per_lv':1, 'max_lv':10},
     {'id':'breed_center','name':'繁殖中心',   'icon':'B', 'desc':'繁殖速度+{bonus}%',     'per_lv':5, 'max_lv':10},
