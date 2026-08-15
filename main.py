@@ -170,6 +170,7 @@ class GeneCryptApp(App):
             ('副本', DungeonScreen),
             ('PvP', PvPScreen),
             ('基建', BaseBuildingScreen),
+            ('装备', EquipmentScreen),
             ('成就', AchievementScreen),
             ('控制台', DebugConsole),
         ]
@@ -346,6 +347,12 @@ class GeneCryptApp(App):
             self._show_main_panel()
             self._refresh_account_tab()
             self._refresh_all_screens()
+            gain = getattr(self.game, '_last_offline_gain', 0)
+            if gain:
+                from kivy.uix.popup import Popup
+                from kivy.uix.label import Label
+                Popup(title='离线收益', content=Label(text=f'精华提炼厂离线产出: 精华+{gain}'),
+                      size_hint=(0.5, 0.25)).open()
         else:
             self._login_status.text = msg
 

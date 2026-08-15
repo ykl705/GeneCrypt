@@ -36,6 +36,9 @@ class BattleScreen(Screen):
         controls.add_widget(self._start_btn)
         self._auto_btn = Button(text='自动', on_press=lambda _: self._toggle_auto())
         controls.add_widget(self._auto_btn)
+        self._infinity_btn = Button(text='无限模式', on_press=lambda _: self._start_infinity())
+        self._infinity_btn.background_color = (0.4, 0.2, 0.6, 1)
+        controls.add_widget(self._infinity_btn)
         self._exit_btn = Button(text='退出战斗', on_press=lambda _: self._exit_battle())
         controls.add_widget(self._exit_btn)
         main.add_widget(controls)
@@ -286,6 +289,43 @@ class BattleScreen(Screen):
                 popup = Popup(title='敌人特质', content=Label(text=hint_text, size_hint_y=None, height=dp(200)),
                               size_hint=(0.7, 0.5))
                 popup.open()
+        Clock.schedule_interval(self._battle_tick, 0.3)
+
+    def _start_infinity(self):
+        if not self._team:
+            popup = Popup(title='错误', content=Label(text='请选择队伍'), size_hint=(0.5, 0.3))
+            popup.open()
+            return
+        app = App.get_running_app()
+        from battle_config import INFINITY_MODE
+        from gene_game import BattleSystem
+        floor = app.game.infinity_floor + 1
+        scale = INFINITY_MODE['base_enemy_scale'] + (floor - 1) * INFINITY_MODE['scale_per_stage']
+        pool = INFINITY_MODE['enemy_pool']
+        count = min(4 + floor // 5, 12)
+        enemy_data = []
+        for i in range(count):
+            t = random.choice(pool)
+            enemy_data.append({
+                'name': t['name'],
+                'health': int(t['base_health'] * scale),
+                'attack': int(t['base_attack'] * scale),
+                'defense': int(t['base_defense'] * scale),
+                'speed': int(t['base_speed'] * scale),
+                'skills': [], 'passive_abilities': [],
+                'width': 1, 'height': 1, 'position': i,
+            })
+        skill_enhance = app.game.tech_tree.get('skill_enhance', {}).get('level', 0)
+        self._battle_system = BattleSystem(dict(self._team), enemy_data, stage_num=min(100, 30 + floor),
+                                           skill_enhance_level=skill_enhance)
+        self._battle_system.is_running = True
+        self._battle_running = True
+        self._selected_stage = floor
+        self._battle_mode = 'infinity'
+        self._challenge_info = None
+        self._infinity_floor = floor
+        self._render_battle_grid()
+        self.add_log(f'[无限模式] 第{floor}层开始! 敌方强化x{scale:.2f}')
         Clock.schedule_interval(self._battle_tick, 0.3)
 
     def _render_battle_grid(self):
@@ -723,6 +763,24 @@ class BattleScreen(Screen):
             alive_players = [u for u in self._battle_system.player_team if u.is_alive]
             if len(alive_players) == len(self._battle_system.player_team):
                 app.game.no_loss_stages.add(stage_num)
+            spirit_level = 0
+            if app.game.tech_tree.get('spirit_large', {}).get('level', 0) > 0:
+                spirit_level = 3
+            elif app.game.tech_tree.get('spirit_medium', {}).get('level', 0) > 0:
+                spirit_level = 2
+            elif app.game.tech_tree.get('spirit_small', {}).get('level', 0) > 0:
+                spirit_level = 1
+            if spirit_level and len(app.game.cards) < app.game.effective_max_cards:
+                if spirit_level == 3:
+                    drops = ['male', 'female']
+                else:
+                    drops = [random.choice(['male', 'female']) for _ in range(spirit_level)]
+                for g in drops:
+                    if len(app.game.cards) >= app.game.effective_max_cards:
+                        break
+                    card = app.game.generate_low_quality_card(gender=g)
+                    if card:
+                        self.add_log(f'[精灵] 战后获得低质量卡牌 {card.name}!')
             self._reward_box.clear_widgets()
             reward_text = f'奖励: 🧬+{gacha_reward} 🧱+{mat_reward} 精华+{essence_reward}'
             self._reward_box.add_widget(Label(text=reward_text, color=(1, 1, 0.6, 1)))
@@ -742,6 +800,17 @@ class BattleScreen(Screen):
                 app.game.gene_essence += essence_reward
                 self._reward_box.clear_widgets()
                 self._reward_box.add_widget(Label(text=f'[副本] 胜利! 🧱+{mat_reward} 精华+{essence_reward}', color=(0.6, 1, 0.6, 1)))
+            elif mode == 'infinity':
+                floor = getattr(self, '_infinity_floor', 1)
+                app.game.infinity_floor = max(app.game.infinity_floor, floor)
+                mat_reward = 20 + floor * 3
+                gacha_reward = 2 + floor // 2
+                essence_reward = 1 + floor // 5
+                app.game.battle_materials += mat_reward
+                app.game.gacha_currency += gacha_reward
+                app.game.gene_essence += essence_reward
+                self._reward_box.clear_widgets()
+                self._reward_box.add_widget(Label(text=f'[无限] 第{floor}层通过! 🧱+{mat_reward} 🧬+{gacha_reward}', color=(0.8, 0.6, 1, 1)))
             else:
                 self._reward_box.clear_widgets()
                 self._reward_box.add_widget(Label(text='胜利!', color=(0.6, 1, 0.6, 1)))
@@ -764,6 +833,20 @@ class BattleScreen(Screen):
             old = app.game.challenge_scores.get(tid)
             if not old or ci['points'] > old.get('points', 0):
                 app.game.challenge_scores[tid] = score_entry
+            alive = [u for u in self._battle_system.player_team if u.is_alive]
+            if len(alive) == len(self._battle_system.player_team):
+                ok, name = app.game.unlock_hidden_achievement('a_hidden_immortal')
+                if ok:
+                    self.add_log(f'[成就] 解锁隐藏成就: {name}!')
+            if elapsed < 60:
+                ok, name = app.game.unlock_hidden_achievement('a_hidden_speed')
+                if ok:
+                    self.add_log(f'[成就] 解锁隐藏成就: {name}!')
+            if (tid == 'blind_box_war' and ci.get('factor_count', 0) > 0
+                    and ci.get('factor_count', 0) >= ci.get('total_factors', 0)):
+                ok, name = app.game.unlock_hidden_achievement('a_hidden_perfect')
+                if ok:
+                    self.add_log(f'[成就] 解锁隐藏成就: {name}!')
             app.game.save_game()
             self.add_log(f'[挑战] 完成! 得分:{ci["points"]} 用时:{mins:02d}:{secs:02d}')
         self._battle_mode = 'campaign'

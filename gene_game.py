@@ -121,6 +121,8 @@ class Card:
     _hybrid_vigor_level = 0
     _hybrid_vigor_all = False
     _stat_break_mult = 1.0
+    _building_atk_mult = 1.0
+    _training_bonus_mult = 1.0
     
     def __init__(self, name, gender=None, chromosomes=None, genes=None, parent_ids=None):
         Card.card_count += 1
@@ -506,6 +508,11 @@ class Card:
             for t in list(traits.keys()):
                 traits[t] = int(traits[t] * stat_mult)
 
+        # Apply base building global ATK bonus (基因研究所)
+        build_mult = getattr(Card, '_building_atk_mult', 1.0)
+        if build_mult != 1.0 and 'attack' in traits:
+            traits['attack'] = int(traits['attack'] * build_mult)
+
         # Apply hybrid vigor bonus when parents differ
         if HYBRID_VIGOR_CONFIG['enabled'] and len(self.parent_ids) >= 2:
             if self.parent_ids[0] != self.parent_ids[1]:
@@ -561,7 +568,33 @@ class Card:
                             traits[stat] = int(traits[stat] * (1 + val / 100.0))
                         else:
                             traits[stat] = traits.get(stat, 0) + val
-        
+
+        # Equipment set bonuses
+        self._active_set_ids = []
+        if eq:
+            from gene_config import SET_BONUSES
+            set_counts = {}
+            for slot, item in eq.items():
+                if isinstance(item, dict) and item.get('set_id'):
+                    sid = item['set_id']
+                    set_counts[sid] = set_counts.get(sid, 0) + 1
+            for sid, cnt in set_counts.items():
+                sb = SET_BONUSES.get(sid)
+                if sb and cnt >= sb['pieces']:
+                    self._active_set_ids.append(sid)
+                    if sid == 'dragon_fury' and 'attack' in traits:
+                        traits['attack'] = int(traits['attack'] * 1.3)
+                    elif sid == 'frost_heart' and 'defense' in traits:
+                        traits['defense'] = int(traits['defense'] * 1.25)
+                    elif sid == 'shadow_dance':
+                        if 'speed' in traits:
+                            traits['speed'] = int(traits['speed'] * 1.15)
+                        traits['dodge_rate'] = int(traits.get('dodge_rate', 0) + 8)
+                    elif sid == 'chaos_source':
+                        for t in ('attack', 'defense', 'health', 'speed'):
+                            if t in traits:
+                                traits[t] = int(traits[t] * 1.25)
+
         return traits
     
     def _apply_genome_enhancements(self, trait_name, base_value):
@@ -815,6 +848,7 @@ class Game:
         self.cards = []
         self.max_cards = 20
         self.effective_max_cards = 20
+        self.infinity_floor = 0
         self.breeding_queue = []
         self.tech_tree = self._copy_tech_tree()
         self.breed_speed_multiplier = 1.0
@@ -1490,6 +1524,7 @@ class Game:
             boost = random.randint(1, 2)
         else:
             boost = random.randint(1, 2)
+        boost = max(1, int(boost * getattr(Card, '_training_bonus_mult', 1.0)))
         card.traits[stat_key] = card.traits.get(stat_key, 10) + boost
         return True, f"训练成功! {stat_key}+{boost} ({card.training[stat_key]}/{max_sessions})"
 
@@ -1579,6 +1614,9 @@ class Game:
             'id': item_id, 'slot': slot, 'rarity': chosen_rarity['id'],
             'name': real_name, 'affixes': affixes,
         }
+        if random.random() < 0.25:
+            from gene_config import SET_BONUSES
+            item['set_id'] = random.choice(list(SET_BONUSES.keys()))
         if item_id not in self.equipment_inventory:
             self.equipment_inventory[item_id] = {'data': item, 'count': 0}
         self.equipment_inventory[item_id]['count'] += 1
@@ -1622,6 +1660,15 @@ class Game:
         parts = item_id.split('_')
         return parts[1] if len(parts) > 1 else 'common'
 
+    def _sync_building_effects(self):
+        gene_lab_lv = self.base_buildings.get('gene_lab', 0)
+        Card._building_atk_mult = 1.0 + gene_lab_lv * 0.01
+        train_lv = self.base_buildings.get('training_camp', 0)
+        Card._training_bonus_mult = 1.0 + train_lv * 0.03
+        wh_lv = self.base_buildings.get('warehouse', 0)
+        self.effective_max_cards = self.max_cards + self._get_card_storage_bonus() + wh_lv * 2
+        self.breed_speed_multiplier = self.get_breed_speed()
+
     def upgrade_building(self, bid):
         from gene_config import BASE_BUILDINGS
         bld = next((b for b in BASE_BUILDINGS if b['id'] == bid), None)
@@ -1639,6 +1686,7 @@ class Game:
         self.battle_materials -= cost_mats
         self.gene_essence -= cost_essence
         self.base_buildings[bid] = lv + 1
+        self._sync_building_effects()
         return True, f"升级成功! Lv.{lv+1}"
 
     def _get_chip_slots(self, card):
@@ -1680,6 +1728,33 @@ class Game:
             task['callback']()
         
         self.breeding_queue = [t for t in self.breeding_queue if not t['completed']]
+        
+        if self.auto_breeding:
+            self._try_auto_breed()
+
+    def _try_auto_breed(self):
+        if self.breeding_queue:
+            return
+        if len(self.cards) >= self.effective_max_cards:
+            return
+        males = [c for c in self.cards if c.is_alive and c.gender == 'male']
+        females = [c for c in self.cards if c.is_alive and c.gender == 'female']
+        if not males or not females:
+            return
+        male = random.choice(males)
+        female = random.choice(females)
+
+        def _on_complete():
+            child_chr, child_gender = self.breeding(male, female)
+            if child_chr:
+                name = f'{male.name[:2]}{female.name[:2]}子代{len(self.cards)+1}'
+                card = self.create_card(name, child_gender, chromosomes=child_chr)
+                if card:
+                    card.bloodline = self.inherit_bloodline(male, female)
+                    self._check_all_quests()
+                    self.save_game()
+
+        self.add_breeding_task(male, female, _on_complete)
     
     def get_breed_speed(self):
         embryo_level = self.tech_tree.get('embryo_engineering', {}).get('level', 0)
@@ -1687,6 +1762,8 @@ class Game:
         base = 1.0 + embryo_level * BREEDING_CONFIG['speed_per_level']
         if fast_level > 0:
             base += fast_level * 0.3
+        breed_center_lv = self.base_buildings.get('breed_center', 0)
+        base *= 1.0 + breed_center_lv * 0.05
         return base
 
     def _sync_tech_effects(self):
@@ -1704,9 +1781,7 @@ class Game:
         sb_level = self.tech_tree.get('stat_break', {}).get('level', 0)
         Card._stat_break_mult = 1.0 + sb_level * 0.1
 
-        self.effective_max_cards = self.max_cards + self._get_card_storage_bonus()
-
-        self.breed_speed_multiplier = self.get_breed_speed()
+        self._sync_building_effects()
     
     def unlock_tech(self, tech_name):
         tech = self.tech_tree.get(tech_name)
@@ -1980,6 +2055,7 @@ class Game:
         self.equipment_inventory = {}
         self.base_buildings = {}
         self.gene_library = {}
+        self.infinity_floor = 0
         self._sync_tech_effects()
         self.create_initial_cards()
         self._init_quests()
@@ -2125,6 +2201,16 @@ class Game:
                 if newly_ach:
                     newly.append({'id': aid, 'title': f'[成就] {newly_ach["name"]}', 'rewards': [{'type': 'achievement', 'ach_id': aid}]})
         return newly
+
+    def unlock_hidden_achievement(self, ach_id):
+        if ach_id in self.achievements:
+            return False, None
+        from gene_config import ACHIEVEMENTS
+        ach = next((a for a in ACHIEVEMENTS if a['id'] == ach_id), None)
+        if not ach:
+            return False, None
+        self.achievements[ach_id] = True
+        return True, ach['name']
 
     def submit_card_for_quest(self, qid, card):
         qd = next((q for q in QUEST_DEFINITIONS if q['id'] == qid), None)
@@ -2292,6 +2378,8 @@ class Game:
                 'achievements': self.achievements,
                 'equipment_inventory': self.equipment_inventory,
                 'base_buildings': self.base_buildings,
+                'infinity_floor': self.infinity_floor,
+                'last_save_time': time.time(),
             }
             tmp = self.SAVE_FILE + '.tmp'
             with open(tmp, 'w', encoding='utf-8') as f:
@@ -2348,6 +2436,7 @@ class Game:
             self.achievements = save_data.get('achievements', {})
             self.equipment_inventory = save_data.get('equipment_inventory', {})
             self.base_buildings = save_data.get('base_buildings', {})
+            self.infinity_floor = save_data.get('infinity_floor', 0)
             Card.card_count = save_data.get('card_count', len(self.cards))
             
             old_ver = save_data.get('save_version', 0)
@@ -2360,6 +2449,17 @@ class Game:
                         self.cards.append(card)
             
             self._sync_tech_effects()
+            offline_gain = 0
+            last_time = save_data.get('last_save_time', 0)
+            if last_time:
+                elapsed = time.time() - last_time
+                if elapsed > 60:
+                    hours = min(elapsed / 3600.0, 12.0)
+                    plant_lv = self.base_buildings.get('essence_plant', 0)
+                    offline_gain = int(hours * plant_lv)
+                    if offline_gain > 0:
+                        self.gene_essence += offline_gain
+            self._last_offline_gain = offline_gain
             for card in self.cards:
                 if card.is_alive:
                     card.traits = card.calculate_traits()
@@ -2403,6 +2503,7 @@ class BattleCard:
         self.passive_skills = card.passive_skills.copy() if hasattr(card, 'passive_skills') else {}
         self.passive_abilities = []
         self.reflex_bound_skill = getattr(card, 'reflex_bound_skill', None)
+        self.set_ids = list(getattr(card, '_active_set_ids', []) or [])
     
     def take_damage(self, damage, attacker=None):
         if self.has_status('evade'):
@@ -3049,6 +3150,16 @@ class BattleSystem:
         
         if skill_type == 'damage':
             damage = self._skill_scale(skill_effect.get('base_damage', 20), attacker, 0.6)
+            if skill_name == '火焰吐息' and 'dragon_fury' in getattr(attacker, 'set_ids', []):
+                team = self.enemies if is_enemy else self.player_team
+                for t in [u for u in team if u.is_alive]:
+                    dmg = self._apply_assassin_bonus(damage, attacker, t)
+                    actual = t.take_damage(dmg, attacker)
+                    self.add_log(f"  → 龙裔之怒! {t.name} 受到 {actual} 点伤害{' 死亡!' if not t.is_alive else ''}")
+                self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，龙裔之怒: 火焰吐息覆盖全体!")
+                self._decrement_guarantee_skill(attacker)
+                return {'type': 'skill', 'skill': skill_name, 'attacker': attacker.name, 'target': target.name,
+                        'attacker_obj': attacker, 'target_obj': target, 'damage': damage}
             damage = self._apply_assassin_bonus(damage, attacker, target)
             actual_damage = target.take_damage(damage, attacker)
             self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，对 {target.name} 造成 {actual_damage} 点伤害!")
@@ -3194,8 +3305,10 @@ class BattleSystem:
 
         elif skill_type == 'freeze':
             turns = skill_effect.get('turns', 1)
+            if 'frost_heart' in getattr(attacker, 'set_ids', []):
+                turns += 1
             target.add_status('freeze', turns)
-            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，{target.name} 被冻结!")
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，{target.name} 被冻结{turns}回合!")
 
         elif skill_type == 'curse':
             turns = skill_effect.get('turns', 3)

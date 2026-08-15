@@ -253,5 +253,7 @@ class ChallengeScreen(Screen):
             'theme_id': self._selected_theme,
             'start_time': time.time(),
             'points': pts,
+            'factor_count': len(selected_factors),
+            'total_factors': len([f for f in CHALLENGE_FACTORS if f.get('theme') == self._selected_theme]),
         }
         app.switch_tab('战斗')
