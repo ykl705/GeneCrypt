@@ -209,10 +209,16 @@ class Card:
         for gene_name, _, _ in regions:
             tmpl = GENE_TEMPLATES.get(gene_name, {})
             seq = tmpl.get('sequence', 'ATGCATGC')
-            if random_dominance and tmpl.get('category') == 'stat':
-                seq = ''.join(random.choices(BASES, k=len(seq)))
+            if random_dominance:
+                is_dom = random.random() < 0.25
+                if tmpl.get('category') == 'stat':
+                    seq = ''.join(random.choices(BASES, k=len(seq)))
+                elif not is_dom:
+                    seq = tmpl.get('recessive_sequence', seq)
+            else:
+                is_dom = True
             parts.append(seq)
-            is_dominant[gene_name] = random.random() < 0.25 if random_dominance else True
+            is_dominant[gene_name] = is_dom
         return ''.join(parts), is_dominant
 
     @staticmethod
@@ -308,26 +314,30 @@ class Card:
             if chr_id in ('chrY', 'chrG'):
                 continue
             if chr_id == 'chrX':
-                x_genome, x_dom = Card._build_genome_for_regions(GENE_REGIONS['chrX'], random_dominance=True)
-                x_genome = Card._pad_genome(x_genome, 'chrX')
+                x1, x1d = Card._build_genome_for_regions(GENE_REGIONS['chrX'], random_dominance=True)
+                x1 = Card._pad_genome(x1, 'chrX')
                 y_genome, y_dom = Card._build_genome_for_regions(GENE_REGIONS['chrY'], random_dominance=True)
                 y_genome = Card._pad_genome(y_genome, 'chrY')
                 if gender == 'male':
                     chromosomes['chrX'] = [
-                        {'type': 'X', 'genome': x_genome, 'is_dominant': copy.deepcopy(x_dom)},
-                        {'type': 'Y', 'genome': y_genome, 'is_dominant': copy.deepcopy(y_dom)}
+                        {'type': 'X', 'genome': x1, 'is_dominant': x1d},
+                        {'type': 'Y', 'genome': y_genome, 'is_dominant': y_dom}
                     ]
                 else:
+                    x2, x2d = Card._build_genome_for_regions(GENE_REGIONS['chrX'], random_dominance=True)
+                    x2 = Card._pad_genome(x2, 'chrX')
                     chromosomes['chrX'] = [
-                        {'type': 'X', 'genome': x_genome, 'is_dominant': copy.deepcopy(x_dom)},
-                        {'type': 'X', 'genome': x_genome, 'is_dominant': copy.deepcopy(x_dom)}
+                        {'type': 'X', 'genome': x1, 'is_dominant': x1d},
+                        {'type': 'X', 'genome': x2, 'is_dominant': x2d}
                     ]
             else:
-                genome, dom = Card._build_genome_for_regions(GENE_REGIONS[chr_id], random_dominance=True)
-                genome = Card._pad_genome(genome, chr_id)
+                g1, d1 = Card._build_genome_for_regions(GENE_REGIONS[chr_id], random_dominance=True)
+                g1 = Card._pad_genome(g1, chr_id)
+                g2, d2 = Card._build_genome_for_regions(GENE_REGIONS[chr_id], random_dominance=True)
+                g2 = Card._pad_genome(g2, chr_id)
                 chromosomes[chr_id] = [
-                    {'genome': genome, 'is_dominant': copy.deepcopy(dom)},
-                    {'genome': genome, 'is_dominant': copy.deepcopy(dom)}
+                    {'genome': g1, 'is_dominant': d1},
+                    {'genome': g2, 'is_dominant': d2}
                 ]
         return chromosomes
     
@@ -777,19 +787,23 @@ class Card:
             pname = template.get('passive_name', '')
             if not pname:
                 continue
-            
-            is_template_dominant = gene_data.get('template_dominant', True)
-            a1_is_dominant = gene_data['allele1'].get('is_dominant', True) == is_template_dominant
-            a2_is_dominant = gene_data['allele2'].get('is_dominant', True) == is_template_dominant
-            
-            if not a1_is_dominant and not a2_is_dominant:
+            seq1 = gene_data['allele1'].get('seq', '')
+            seq2 = gene_data['allele2'].get('seq', '')
+            if gene_name == 'skill_split':
+                if (len(seq1) >= 8 and len(seq2) >= 8
+                        and seq1[:2] == 'AA' and seq1[6:8] == 'CC'
+                        and seq2[:2] == 'AA' and seq2[6:8] == 'CC'):
+                    passive['分裂'] = True
+                continue
+            bseq = template.get('sequence', '')[:6]
+            if not bseq or len(seq1) < 6 or len(seq2) < 6:
+                continue
+            if seq1[:6] == bseq and seq2[:6] == bseq:
                 if pname == '荆棘':
-                    seq = gene_data['allele1'].get('seq', '')
-                    tail = seq[6:12] if len(seq) >= 12 else ''
+                    tail = seq1[6:12] if len(seq1) >= 12 else ''
                     t_count = tail.count('T')
-                    reflect_pct = 50 + t_count * 20
-                    passive[pname] = reflect_pct
-                elif pname in ('暗杀者', '条件反射'):
+                    passive[pname] = 50 + t_count * 20
+                else:
                     passive[pname] = True
         return passive
     
@@ -991,18 +1005,16 @@ class Game:
         if 'cards' in config:
             for entry in config['cards']:
                 card = Card(entry['name'], entry.get('gender'))
-                card.skills = card.skills[:2]
+                self._grant_starter_skills(card, 2)
                 self._init_starter_passive(card)
-                self._deactivate_extra_skill_genes(card)
                 self.cards.append(card)
         else:
             for i in range(config['count']):
                 gender = config['genders'][i] if i < len(config['genders']) else 'male'
                 name = config['names'].get(gender, f"初始体{i+1}")
                 card = Card(name, gender)
-                card.skills = card.skills[:2]
+                self._grant_starter_skills(card, 2)
                 self._init_starter_passive(card)
-                self._deactivate_extra_skill_genes(card)
                 self.cards.append(card)
         starter_gifts = [
             {'name': '新手战士', 'gender': 'male', 'atk': 12, 'hp': 70, 'def_val': 10, 'spd': 9},
@@ -1013,11 +1025,46 @@ class Game:
         for g in starter_gifts:
             card = self._create_low_stat_card(g['name'], g['gender'],
                 atk=g['atk'], hp=g['hp'], def_val=g['def_val'], spd=g['spd'])
-            card.skills = card.skills[:2]
+            self._grant_starter_skills(card, 1)
             self._init_starter_passive(card)
-            self._deactivate_extra_skill_genes(card)
             self.cards.append(card)
     
+    STARTER_SKILL_POOL = ['skill_fire', 'skill_ice', 'skill_shield', 'skill_heal']
+
+    def _grant_starter_skills(self, card, count=2):
+        import random
+        from gene_config import SKILL_GENES, GENE_TEMPLATES
+        for gene_name in SKILL_GENES:
+            gene_data = card.genes.get(gene_name)
+            if not gene_data:
+                continue
+            gene_data['allele1']['is_dominant'] = False
+            gene_data['allele2']['is_dominant'] = False
+            chr_id = gene_data.get('chromosome', 'chr1')
+            if chr_id == 'chrY':
+                chr_id = 'chrX'
+            for h in card.chromosomes.get(chr_id, []):
+                dom = h.get('is_dominant')
+                if dom and gene_name in dom:
+                    dom[gene_name] = False
+        pool = [gn for gn in self.STARTER_SKILL_POOL if gn in SKILL_GENES]
+        picked = random.sample(pool, min(count, len(pool)))
+        for gene_name in picked:
+            gene_data = card.genes.get(gene_name)
+            if not gene_data:
+                continue
+            gene_data['allele1']['is_dominant'] = True
+            gene_data['allele2']['is_dominant'] = True
+            chr_id = gene_data.get('chromosome', 'chr1')
+            if chr_id == 'chrY':
+                chr_id = 'chrX'
+            homologs = card.chromosomes.get(chr_id, [])
+            for h in homologs:
+                dom = h.get('is_dominant')
+                if dom and gene_name in dom:
+                    dom[gene_name] = True
+        card.skills = card.get_skills()
+
     def _deactivate_extra_skill_genes(self, card):
         from gene_config import SKILL_GENES, GENE_TEMPLATES
         kept_skill_genes = set()
@@ -1044,22 +1091,32 @@ class Game:
     
     def _init_starter_passive(self, card):
         import random
-        from gene_config import PASSIVE_GENES, GENE_TEMPLATES
+        from gene_config import PASSIVE_GENES, GENE_TEMPLATES, GENE_REGIONS as _GR
         active_gene = random.choice(PASSIVE_GENES)
         for gene_name in PASSIVE_GENES:
             gene_data = card.genes.get(gene_name)
             if not gene_data:
                 continue
-            new_dom = gene_name != active_gene
-            gene_data['allele1']['is_dominant'] = new_dom
-            gene_data['allele2']['is_dominant'] = new_dom
+            is_active = (gene_name == active_gene)
+            gene_data['allele1']['is_dominant'] = is_active
+            gene_data['allele2']['is_dominant'] = is_active
+            tmpl = GENE_TEMPLATES.get(gene_name, {})
+            newseq = tmpl.get('sequence', '') if is_active else tmpl.get('recessive_sequence', 'a' * 12)
             chr_id = gene_data.get('chromosome', 'chr1')
-            homologs = card.chromosomes.get(chr_id)
-            if homologs:
+            homologs = card.chromosomes.get(chr_id, [])
+            for h in homologs:
+                dom = h.get('is_dominant')
+                if dom and gene_name in dom:
+                    dom[gene_name] = is_active
+            for gname, gs, ge in _GR.get(chr_id, []):
+                if gname != gene_name:
+                    continue
                 for h in homologs:
-                    dom = h.get('is_dominant')
-                    if dom and gene_name in dom:
-                        dom[gene_name] = new_dom
+                    genome = h.get('genome', '')
+                    if ge <= len(genome) and newseq:
+                        h['genome'] = genome[:gs] + newseq[:ge-gs].ljust(ge-gs) + genome[ge:]
+                break
+        card._rebuild_genes()
         card.passive_skills = card.get_passive_skills()
     
     @staticmethod
@@ -1199,6 +1256,10 @@ class Game:
                             dom_map = homolog.get('is_dominant')
                             if isinstance(dom_map, dict) and gene_name in dom_map:
                                 dom_map[gene_name] = True
+                                tmpl = GENE_TEMPLATES.get(gene_name, {})
+                                dseq = tmpl.get('sequence', '')
+                                if dseq and end <= len(genome):
+                                    genome = genome[:start] + dseq[:end-start].ljust(end-start) + genome[end:]
                 homolog['genome'] = genome
                 if chr_id == 'chrX' and h_idx == 1 and homolog.get('type') == 'Y':
                     for gene_name, start, end in GENE_REGIONS['chrY']:
@@ -1208,6 +1269,10 @@ class Game:
                                 dom_map = homolog.get('is_dominant')
                                 if isinstance(dom_map, dict) and gene_name in dom_map:
                                     dom_map[gene_name] = True
+                                    tmpl = GENE_TEMPLATES.get(gene_name, {})
+                                    dseq = tmpl.get('sequence', '')
+                                    if dseq and end <= len(genome):
+                                        genome = genome[:start] + dseq[:end-start].ljust(end-start) + genome[end:]
                     homolog['genome'] = genome
 
         self.breed_counter += 1
@@ -1542,6 +1607,10 @@ class Game:
                             dom_map = homolog.get('is_dominant')
                             if isinstance(dom_map, dict) and gene_name in dom_map:
                                 dom_map[gene_name] = True
+                                tmpl = GENE_TEMPLATES.get(gene_name, {})
+                                dseq = tmpl.get('sequence', '')
+                                if dseq and end <= len(genome):
+                                    genome = genome[:start] + dseq[:end-start].ljust(end-start) + genome[end:]
                 homolog['genome'] = genome
                 if chr_id == 'chrX' and h_idx == 1 and homolog.get('type') == 'Y':
                     for gene_name, start, end in GENE_REGIONS['chrY']:
@@ -1551,6 +1620,10 @@ class Game:
                                 dom_map = homolog.get('is_dominant')
                                 if isinstance(dom_map, dict) and gene_name in dom_map:
                                     dom_map[gene_name] = True
+                                    tmpl = GENE_TEMPLATES.get(gene_name, {})
+                                    dseq = tmpl.get('sequence', '')
+                                    if dseq and end <= len(genome):
+                                        genome = genome[:start] + dseq[:end-start].ljust(end-start) + genome[end:]
                     homolog['genome'] = genome
         return child_chromosomes, child_gender
     
@@ -2092,16 +2165,30 @@ class Game:
             card = self.create_card(name, gender, add_to_library=False)
             if not card:
                 continue
-            card.skills = []
-            card.passive_skills = {}
-            
+
             if rarity == 'rare':
                 for t in list(card.traits.keys()):
                     card.traits[t] = int(card.traits.get(t, 10) * 1.2)
-                from battle_config import SKILL_EFFECTS as _SE
-                extra = [s for s in _SE if s not in card.skills]
-                random.shuffle(extra)
-                card.skills.extend(extra[:2])
+                from gene_config import SKILL_GENES, GENE_TEMPLATES
+                dormant = [gn for gn in SKILL_GENES
+                           if not GENE_TEMPLATES.get(gn, {}).get('gacha_only')
+                           and not (card.genes.get(gn, {}).get('allele1', {}).get('is_dominant')
+                                    and card.genes.get(gn, {}).get('allele2', {}).get('is_dominant'))]
+                random.shuffle(dormant)
+                for gene_name in dormant[:2]:
+                    gene_data = card.genes.get(gene_name)
+                    if not gene_data:
+                        continue
+                    gene_data['allele1']['is_dominant'] = True
+                    gene_data['allele2']['is_dominant'] = True
+                    chr_id = gene_data.get('chromosome', 'chr1')
+                    if chr_id == 'chrY':
+                        chr_id = 'chrX'
+                    for h in card.chromosomes.get(chr_id, []):
+                        dom = h.get('is_dominant')
+                        if dom and gene_name in dom:
+                            dom[gene_name] = True
+                card.skills = card.get_skills()
                 card._rarity = 'rare'
             elif rarity == 'ultra':
                 self.pity_counters[pool_id] = 0
@@ -3613,7 +3700,9 @@ class BattleSystem:
             total_damage = base_damage + bonus
             actual_damage = target.take_damage(total_damage, attacker)
             target.add_status('poison', poison_turns, attacker.attack)
-            target.status_effects['curse'] = {'turns': def_turns, 'damage_mult': 1.0}
+            d = target.add_status('curse', def_turns)
+            if d:
+                d['damage_mult'] = 1.0
             self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，对 {target.name} 造成 {actual_damage} 伤害(debuff加成{bonus})，降低防御并附加中毒!")
 
         elif skill_type == 'inferno':
@@ -3629,8 +3718,9 @@ class BattleSystem:
                     if t.has_status('burn'):
                         damage = int(damage * 1.3)
                     actual_damage = t.take_damage(damage, attacker)
-                    t.add_status('burn', burn_turns)
-                    t.status_effects['burn']['max_hp_pct'] = 0.15
+                    d = t.add_status('burn', burn_turns)
+                    if d:
+                        d['max_hp_pct'] = 0.15
                     self.add_log(f"  → {t.name} 受到 {actual_damage} 伤害，附加灼烧{burn_turns}回合!")
                 self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，炼狱之火席卷战场!")
 
@@ -3651,8 +3741,9 @@ class BattleSystem:
                     if other.is_alive and other is not target:
                         splash = max(1, int(actual_damage * splash_pct))
                         other.take_damage(splash, attacker)
-                        other.add_status('burn', 3)
-                        other.status_effects['burn']['max_hp_pct'] = 0.15
+                        d = other.add_status('burn', 3)
+                        if d:
+                            d['max_hp_pct'] = 0.15
                         self.add_log(f"  → 溅射! {other.name} 受到 {splash} 伤害并灼烧!")
             elif has_burn:
                 self.add_log(f"  → {target.name}的灼烧被引爆!")
@@ -3695,8 +3786,9 @@ class BattleSystem:
             actual_damage = target.take_damage(base_damage, attacker)
             bleed_pct = skill_effect.get('bleed_pct', 0.10)
             bleed_turns = skill_effect.get('bleed_turns', 3)
-            target.add_status('bleed', bleed_turns)
-            target.status_effects['bleed']['max_hp_pct'] = bleed_pct
+            d = target.add_status('bleed', bleed_turns)
+            if d:
+                d['max_hp_pct'] = bleed_pct
             self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，对 {target.name} 造成 {actual_damage} 伤害，附加流血!")
             if not target.is_alive:
                 heal_amt = int(actual_damage * 0.5)
@@ -3718,8 +3810,9 @@ class BattleSystem:
                     if t.has_status('bleed'):
                         damage = int(damage * bleed_mult)
                     actual_damage = t.take_damage(damage, attacker)
-                    t.add_status('bleed', bleed_turns)
-                    t.status_effects['bleed']['max_hp_pct'] = bleed_pct
+                    d = t.add_status('bleed', bleed_turns)
+                    if d:
+                        d['max_hp_pct'] = bleed_pct
                     self.add_log(f"  → {t.name} 受到 {actual_damage} 伤害，血流不止!")
                 self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，猩红风暴肆虐!")
 
@@ -3911,14 +4004,83 @@ class BattleSystem:
         return False
     
     def process_death_triggers(self):
-        if not self._factor_ids:
-            return
         try:
-            from challenge_factors import process_deaths as _cf_deaths, process_tick as _cf_tick
-            _cf_deaths(self)
-            _cf_tick(self)
+            if self._factor_ids:
+                from challenge_factors import process_deaths as _cf_deaths, process_tick as _cf_tick
+                _cf_deaths(self)
+                _cf_tick(self)
         except Exception as e:
             self.add_log(f'[因子周期异常] {e}')
+        self._process_split_deaths()
+
+    def _process_split_deaths(self):
+        if not hasattr(self, '_split_processed'):
+            self._split_processed = set()
+        changed = False
+        for u in list(self.player_team) + list(self.enemies):
+            if u.is_alive or id(u) in self._split_processed:
+                continue
+            self._split_processed.add(id(u))
+            if getattr(u, '_no_split', False):
+                continue
+            pskills = getattr(u, 'passive_skills', {}) or {}
+            if '分裂' not in pskills:
+                continue
+            team = self.player_team if u.is_player else self.enemies
+            gs = self.grid_size if u.is_player else self.enemy_grid_size
+            occupied = set()
+            for x in team:
+                if x.is_alive:
+                    for op in getattr(x, 'occupied_positions', [x.position]):
+                        occupied.add(op)
+            free = [p for p in range(gs * gs) if p not in occupied]
+            spawned = 0
+            for i in range(2):
+                if not free:
+                    break
+                pos = free.pop(0)
+                child = self._clone_half_unit(u, pos, gs)
+                if child:
+                    team.append(child)
+                    spawned += 1
+            if spawned > 0:
+                self.add_log(f"🧫 {u.name} 死亡后分裂成 {spawned} 个幼体!")
+                changed = True
+        if changed:
+            self._rebuild_unit_cache()
+
+    def _clone_half_unit(self, unit, pos, gs):
+        child = None
+        if unit.is_player:
+            child = BattleCard(unit.card, pos, gs)
+        else:
+            data = {
+                'name': unit.name + '幼体',
+                'health': max(1, unit.max_health // 2),
+                'attack': max(1, unit.attack // 2),
+                'defense': max(0, unit.defense // 2),
+                'speed': max(1, unit.speed // 2),
+                'skills': list(getattr(unit, 'skills', [])),
+                'passive_abilities': [],
+                'width': 1, 'height': 1, 'position': pos,
+            }
+            child = Enemy(data, position=pos, grid_size=gs)
+        if child is None:
+            return None
+        child.max_health = max(1, unit.max_health // 2)
+        child.current_health = child.max_health
+        child.attack = max(1, unit.attack // 2)
+        child.defense = max(0, unit.defense // 2)
+        child.speed = max(1, unit.speed // 2)
+        child.skills = list(getattr(unit, 'skills', []))
+        child.passive_skills = dict(getattr(unit, 'passive_skills', {}) or {})
+        child._no_split = True
+        child.position = pos
+        child.row = pos // gs
+        child.col = pos % gs
+        if unit.is_player:
+            child.id = f'{unit.id}_s{random.randint(1000, 9999)}'
+        return child
 
     def update_status_damage(self):
         poison_mult = 1.0

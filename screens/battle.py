@@ -635,6 +635,8 @@ class BattleScreen(Screen):
                         self.add_log(f'{unit.name} → {tname} {dmg}伤害')
 
             self._update_all_cells()
+            if len(bs._all_units_cache) != len(self._unit_cells):
+                self._render_battle_grid()
         except Exception as e:
             self.add_log(f'[ERR] {e}')
         return True

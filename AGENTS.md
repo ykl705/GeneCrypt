@@ -78,8 +78,17 @@ python -c "import sys; sys.path.insert(0,'.'); import gene_config as gc, gene_en
   Engine exceptions caught+logged, never crash battle.
 - Genome quality system: `Card.genome_quality` scored from dominant
   stat/skill/gacha genes (vital excluded, recessive inverted, chrG ×1.0).
-  Random cards get 25% allele dominance + random stat-gene sequences;
-  breeding mutation can flip dominance (35% on gene mutation).
+  Homologs built independently (25% allele dominance + random stat-gene
+  sequences); breeding crossover+mutation can flip dominance (35% on
+  gene mutation, also writes dominant sequence).
+- Skills are fully gene-determined (技能说明.md): all skill genes
+  recessive — express only when BOTH alleles dominant (homozygous).
+  Starters draw 2 skills from STARTER_SKILL_POOL (4 shared genes) so
+  early breeding keeps skills; gacha rare activates 2 dormant genes;
+  ultra injects chrG gacha gene. Passives (荆棘/暗杀者/条件反射/分裂)
+  activate via B-sequence prefix on BOTH homologs; 分裂 (skill_split,
+  chr3 tail) needs AA@[0:2]+CC@[6:8] on both homologs — on death splits
+  into two half-stat units (no re-split).
 - Gene enhancement regions (`STAT_ENHANCE_REGIONS` in
   gene_enhance_config.py): long regions (add 40-70 bases, mul 20-35 bases)
   placed in the padding AFTER genes on chr1/chr2/chr3/chrX (many chromosome

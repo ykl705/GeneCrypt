@@ -377,6 +377,15 @@ GENE_TEMPLATES = {
         'category': 'passive',
         'passive_name': '荆棘',
     },
+    'skill_split': {
+        'sequence': 'AATCGGCCATCG',  # 双段检测: [0:2]=AA 且 [6:8]=CC
+        'recessive_sequence': 'aaaaaaaaaaaa',
+        'dominant': True,
+        'vital': False,
+        'description': '分裂被动基因 — 两条同源体[0:2]为AA且[6:8]为CC时激活，死亡时分裂成两个数值减半的个体（分裂体不再分裂）',
+        'category': 'passive',
+        'passive_name': '分裂',
+    },
 
     # ==================== 特殊基因 ====================
     'luck': {
@@ -656,7 +665,7 @@ CHROMOSOME_LAYOUT = {
                   'skill_observe', 'skill_surge', 'skill_heal_team',
                   'skill_assassin', 'skill_reflex',
                   'luck', 'charisma', 'adaptability', 'thorns',
-                  'skill_curse', 'skill_aoe_poison', 'skill_revive'],
+                  'skill_curse', 'skill_aoe_poison', 'skill_revive', 'skill_split'],
     },
     'chrX': {
         'name': 'X染色体',
