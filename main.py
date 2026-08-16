@@ -195,7 +195,10 @@ class GeneCryptApp(App):
             for tab in tp.tab_list:
                 content = tab.content
                 if tab == tp.current_tab and hasattr(content, 'on_enter'):
-                    content.on_enter()
+                    try:
+                        content.on_enter()
+                    except Exception as e:
+                        log_error(f'Tab on_enter error ({tab.text}): {e}')
             if tp.current_tab and tp.current_tab.text == '☁账户':
                 self._refresh_account_tab()
         
@@ -319,10 +322,13 @@ class GeneCryptApp(App):
             self._show_main_panel()
             self._refresh_account_tab()
             self._refresh_all_screens()
+            self._show_welcome_tutorial()
         else:
             status_lbl.text = msg
 
     def _on_login_result(self, result):
+        from kivy.uix.popup import Popup
+        from kivy.uix.label import Label
         success = result[0]
         msg = result[1]
         if success:
@@ -333,13 +339,20 @@ class GeneCryptApp(App):
             if len(result) > 2 and result[2]:
                 save = result[2].get('save')
                 if save:
+                    loaded = False
                     try:
                         path = self.game.SAVE_FILE
                         with open(path, 'w', encoding='utf-8') as f:
                             json.dump(save, f, ensure_ascii=False)
-                        self.game.load_game()
-                    except:
-                        pass
+                        loaded = self.game.load_game()
+                    except Exception as e:
+                        log_error(f'Login load error: {e}\n{traceback.format_exc()}')
+                    if not loaded:
+                        try:
+                            if self.game:
+                                self.game.reset_game_state()
+                        except Exception as e:
+                            log_error(f'Reset after load error: {e}')
                 else:
                     if self.game:
                         self.game.reset_game_state()
@@ -351,32 +364,39 @@ class GeneCryptApp(App):
             self._refresh_all_screens()
             gain = getattr(self.game, '_last_offline_gain', 0)
             if gain:
-                from kivy.uix.popup import Popup
-                from kivy.uix.label import Label
                 Popup(title='离线收益', content=Label(text=f'精华提炼厂离线产出: 精华+{gain}'),
                       size_hint=(0.5, 0.25)).open()
-            if not getattr(self.game, 'tutorial_seen', True):
-                self.game.tutorial_seen = True
-                self.game.save_game()
-                from screens.guide import GUIDE_SECTIONS
-                from kivy.uix.scrollview import ScrollView
-                box = BoxLayout(orientation='vertical', spacing=dp(6), padding=dp(12))
-                sv = ScrollView(size_hint_y=1)
-                inner = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(4))
-                inner.bind(minimum_height=inner.setter('height'))
-                for line in GUIDE_SECTIONS[0]['lines'] + ['', '完整说明请看「指引」页签']:
-                    lbl = Label(text=line, size_hint_y=None, height=dp(28), halign='left',
-                                color=(0.9, 0.9, 0.9, 1))
-                    lbl.bind(size=lambda *_: setattr(lbl, 'text_size', lbl.size))
-                    inner.add_widget(lbl)
-                sv.add_widget(inner)
-                box.add_widget(sv)
-                box.add_widget(Button(text='开始冒险!', size_hint_y=None, height=dp(44),
-                                      on_press=lambda _: popup.dismiss()))
-                popup = Popup(title='欢迎来到 GeneCrypt!', content=box, size_hint=(0.9, 0.65))
-                popup.open()
+            self._show_welcome_tutorial()
         else:
             self._login_status.text = msg
+
+    def _show_welcome_tutorial(self):
+        if getattr(self.game, 'tutorial_seen', True):
+            return
+        try:
+            self.game.tutorial_seen = True
+            self.game.save_game()
+            from kivy.uix.popup import Popup
+            from kivy.uix.label import Label
+            from kivy.uix.scrollview import ScrollView
+            from screens.guide import GUIDE_SECTIONS
+            box = BoxLayout(orientation='vertical', spacing=dp(6), padding=dp(12))
+            sv = ScrollView(size_hint_y=1)
+            inner = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(4))
+            inner.bind(minimum_height=inner.setter('height'))
+            for line in GUIDE_SECTIONS[0]['lines'] + ['', '完整说明请看「指引」页签']:
+                lbl = Label(text=line, size_hint_y=None, height=dp(28), halign='left',
+                            color=(0.9, 0.9, 0.9, 1))
+                lbl.bind(size=lambda *_: setattr(lbl, 'text_size', lbl.size))
+                inner.add_widget(lbl)
+            sv.add_widget(inner)
+            box.add_widget(sv)
+            box.add_widget(Button(text='开始冒险!', size_hint_y=None, height=dp(44),
+                                  on_press=lambda _: popup.dismiss()))
+            popup = Popup(title='欢迎来到 GeneCrypt!', content=box, size_hint=(0.9, 0.65))
+            popup.open()
+        except Exception as e:
+            log_error(f'Welcome tutorial error: {e}')
 
     def _refresh_all_screens(self):
         for name, screen in self._screen_refs.items():
