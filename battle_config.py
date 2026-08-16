@@ -1497,6 +1497,79 @@ SPECIAL_SKIP_EXTRA = {'rock', 'devourer', 'void_destroyer', 'mech_god', 'abyss_l
                       'guardian_spirit', 'commander', 'war_drummer', 'corruption_source',
                       'vengeful_wraith', 'bone_dragon'}
 
+_SUPPORT_SKILLS = {'甘霖', '自我修复', '能量护盾', '冰霜护盾', '召唤', '污染净化', '净化之火',
+                   '圣疗', '机械充能', '基因突变', '古代守护', '消毒喷雾', '血肉献祭', '澎湃'}
+_SUPPORT_PASSIVES = {'heal_aura', 'shield_aura', 'fortify', 'bless', 'attack_aura',
+                     'defense_aura', 'speed_aura', 'gate_guard', 'regeneration'}
+
+
+def _classify_enemy_role(tmpl):
+    """按作用划分敌方站位：tank前排 / melee中列 / backline刺客后排 / support辅助后排"""
+    hp = tmpl.get('base_health', 100)
+    atk = tmpl.get('base_attack', 10)
+    df = tmpl.get('base_defense', 5)
+    spd = tmpl.get('base_speed', 10)
+    skills = set(tmpl.get('skills_pool', []))
+    passives = set(tmpl.get('passive_abilities', []))
+    if tmpl.get('immune_to_debuffs', False):
+        return 'tank'
+    if passives & _SUPPORT_PASSIVES:
+        return 'support'
+    if skills & _SUPPORT_SKILLS and atk <= hp * 0.12 and spd <= 18:
+        return 'support'
+    if hp >= atk * 4 or df >= atk:
+        return 'tank'
+    if atk >= hp * 1.5 or (spd >= 18 and hp <= 100):
+        return 'backline'
+    return 'melee'
+
+
+def _position_enemies(enemies, grid_size):
+    """按作用分配站位：坦克前排(第1列)、近战中列、刺客/辅助后排(最后列)。"""
+    gs = grid_size
+    by_name = {t['name']: t for t in ENEMY_TEMPLATES.values()}
+    multi = [e for e in enemies if e.get('width', 1) > 1 or e.get('height', 1) > 1]
+    singles = [e for e in enemies if e not in multi]
+    occupied = set()
+    for e in multi:
+        e['position'] = 0
+        for h in range(e.get('height', 1)):
+            for w in range(e.get('width', 1)):
+                occupied.add(w + h * gs)
+    buckets = {'tank': [], 'melee': [], 'backline': [], 'support': []}
+    for e in singles:
+        tmpl = by_name.get(e.get('name'))
+        role = _classify_enemy_role(tmpl) if tmpl else 'melee'
+        buckets[role].append(e)
+    col_order = {
+        'tank': [0],
+        'melee': [1, 0],
+        'backline': [gs - 1, gs - 2],
+        'support': [gs - 1, gs - 2],
+    }
+    for role, cols in col_order.items():
+        for e in buckets[role]:
+            placed = False
+            for col in cols:
+                if col < 0:
+                    continue
+                for row in range(gs):
+                    pos = row * gs + col
+                    if pos not in occupied:
+                        occupied.add(pos)
+                        e['position'] = pos
+                        placed = True
+                        break
+                if placed:
+                    break
+            if not placed:
+                for p in range(gs * gs):
+                    if p not in occupied:
+                        occupied.add(p)
+                        e['position'] = p
+                        break
+    return enemies
+
 
 def _apply_synergies(enemies, enemy_types_in_stage):
     type_map = {e['_etype']: e for e in enemies}
@@ -1738,6 +1811,10 @@ def _generate_stages():
         for e in enemies:
             e.pop('_etype', None)
 
+        # 按作用分配站位（坦克前排/近战中列/刺客辅助后排）
+        _grid_size = 4 if (stage_num > 60 or (stage_num >= 40 and stage_num % 10 == 0)) else 3
+        _position_enemies(enemies, _grid_size)
+
         reward = {'unlock_stage': stage_num + 1}
         if stage_num % 5 == 0:
             reward['extra_exp'] = 100 + stage_num * 10
@@ -1835,6 +1912,9 @@ def _generate_map_stages():
             _apply_synergies(enemies, enemy_types_in_stage)
             for e in enemies:
                 e.pop('_etype', None)
+
+            # 按作用分配站位
+            _position_enemies(enemies, 4)
 
             title = titles[i] if i < len(titles) else f'第{stage_num}层'
             stage = {

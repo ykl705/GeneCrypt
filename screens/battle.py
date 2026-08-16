@@ -479,7 +479,7 @@ class BattleScreen(Screen):
                     cell.add_widget(img)
 
         row1 = BoxLayout(orientation='horizontal', size_hint_y=0.17, spacing=dp(2))
-        row1.add_widget(Label(text=unit.name[:5], color=nc, font_size=name_s, bold=True,
+        row1.add_widget(Label(text=unit.name[:8], color=nc, font_size=name_s, bold=True,
                               size_hint_x=0.55, halign='left', valign='middle'))
         row1.add_widget(Label(text=f'SPD{unit.speed}', color=(0.7, 0.7, 0.7, 1),
                               font_size=font_s, size_hint_x=0.45, halign='right'))
@@ -612,8 +612,7 @@ class BattleScreen(Screen):
                         target = bs.marked_target
                         bs.marked_target = None
                     else:
-                        front = [e for e in bs.enemies if e.is_alive]
-                        target = front[0] if front else None
+                        target = bs._select_front_target([e for e in bs.enemies if e.is_alive], unit)
                     if target:
                         result = bs.execute_turn(unit, [target])
                         self._flash_attack(unit, target)

@@ -56,11 +56,13 @@ class ChallengeScreen(Screen):
         dummy.stage_num = stage_num
         dummy.enemy_grid_size = 3
         from challenge_factors import _mk_enemy_data
+        from battle_config import _position_enemies
         enemies = []
-        for i, key in enumerate(keys):
-            data = _mk_enemy_data(dummy, key, position=i)
+        for key in keys:
+            data = _mk_enemy_data(dummy, key)
             if data:
                 enemies.append(data)
+        _position_enemies(enemies, 3)
         return enemies
 
     def __init__(self, **kwargs):

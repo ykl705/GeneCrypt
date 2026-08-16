@@ -2761,6 +2761,8 @@ class BattleCard:
         return actual_damage
     
     def heal(self, amount):
+        if getattr(self, '_heal_penalty', False):
+            amount = int(amount * 0.5)
         self.current_health = min(self.current_health + amount, self.max_health)
     
     def add_status(self, status_name, turns, attacker_attack=0):
@@ -2887,12 +2889,24 @@ class Enemy:
         from battle_config import ENEMY_PASSIVES as _EP
         for _pa_key in self.passive_abilities:
             _pdata = _EP.get(_pa_key)
-            if _pdata and _pa_key == 'thorns_aura':
+            if not _pdata:
+                continue
+            if _pa_key in ('thorns_aura', 'reactive_armor', 'acid_armor'):
                 _reflect_pct = int(_pdata['params'].get('reflect_pct', 0) * 100)
                 self.passive_skills['荆棘'] = _reflect_pct
+        if 'rune_ward' in self.passive_abilities:
+            self._rune_ward = True
+        if 'abyss_resistance' in self.passive_abilities:
+            self._abyss_resist = True
+        if 'sand_veil' in self.passive_abilities:
+            self._sand_veil = True
+        if 'execute_mastery' in self.passive_abilities:
+            self._execute_mastery = True
     
     def take_damage(self, damage, attacker=None):
         if getattr(self, '_spell_shield', False) and not getattr(attacker, '_casting_skill', False):
+            return 0
+        if getattr(self, '_sand_veil', False) and random.random() < 0.20:
             return 0
         if self.has_status('evade'):
             self.remove_status('evade')
@@ -2908,6 +2922,30 @@ class Enemy:
         
         if getattr(self, 'passive_abilities', None) and 'aoe_barrier' in self.passive_abilities:
             damage = int(damage * 0.5)
+        
+        if getattr(self, '_rune_ward', False):
+            damage = int(damage * 0.8)
+        if getattr(self, '_abyss_resist', False):
+            damage = int(damage * 0.85)
+        if getattr(self, '_rift_guard', False):
+            damage = int(damage * 0.5)
+        
+        # 冰霜铠甲：被近战攻击时50%冻结攻击者
+        if (getattr(self, 'passive_abilities', None) and 'frost_armor' in self.passive_abilities
+                and attacker is not None and attacker.is_player
+                and not getattr(attacker, '_casting_skill', False)
+                and random.random() < 0.5):
+            attacker.add_status('freeze', 1)
+        # 幻影分身：受击时25%产生分身
+        if (getattr(self, 'passive_abilities', None) and 'mirage_clone' in self.passive_abilities
+                and attacker is not None and random.random() < 0.25):
+            self._mirage_pending = True
+        # 酸蚀装甲：反伤并降低攻击者防御
+        if (getattr(self, 'passive_abilities', None) and 'acid_armor' in self.passive_abilities
+                and attacker is not None):
+            d = attacker.add_status('defense_buff', 2)
+            if d:
+                d['value'] = -15
         
         effective_defense = self.defense
         if self.has_status('defense_buff'):
@@ -2937,6 +2975,17 @@ class Enemy:
                 self.current_health = 0
                 self.is_alive = False
         
+        # 圣甲虫群堆叠：单体伤害只伤一只，AOE全体受伤
+        swarm_n = getattr(self, '_swarm_stack', 0)
+        if swarm_n > 1 and not self.is_alive:
+            single_hit = not (getattr(attacker, '_casting_skill', False) or getattr(attacker, '_aoe_hit', False))
+            if single_hit:
+                self._swarm_stack = swarm_n - 1
+                self.max_health = self._swarm_base_hp * self._swarm_stack
+                self.current_health = self.max_health
+                self.is_alive = True
+                self._update_swarm_display()
+        
         if actual_damage > 0 and attacker and not getattr(attacker, '_reflecting', False):
             attacker.total_damage_dealt += actual_damage
             reflect_pct = self.passive_skills.get('荆棘', 0)
@@ -2954,7 +3003,14 @@ class Enemy:
     
     def heal(self, amount):
         self.current_health = min(self.current_health + amount, self.max_health)
-    
+
+    def _update_swarm_display(self):
+        n = getattr(self, '_swarm_stack', 1)
+        base_name = getattr(self, '_swarm_base_name', self.name)
+        self.name = f'{base_name}x{n}'
+        base_spd = getattr(self, '_swarm_base_spd', self.speed)
+        self.speed = int(base_spd * (1 + 0.1 * (n - 1)))
+
     def add_status(self, status_name, turns, attacker_attack=0):
         if getattr(self, 'immune_to_debuffs', False):
             return None
@@ -3283,9 +3339,14 @@ class BattleSystem:
             if is_critical:
                 base_damage = int(base_damage * BATTLE_CONFIG['critical_damage'])
             self.add_log(f"【敌方 {attacker.name}】发起全体攻击!{' 暴击!' if is_critical else ''}")
-            for target in alive_targets:
-                dmg = target.take_damage(base_damage, attacker)
-                self.add_log(f"  → {target.name} 受到 {dmg} 点伤害{' 死亡!' if not target.is_alive else ''}")
+            attacker._aoe_hit = True
+            try:
+                for target in alive_targets:
+                    dmg = target.take_damage(base_damage, attacker)
+                    self.add_log(f"  → {target.name} 受到 {dmg} 点伤害{' 死亡!' if not target.is_alive else ''}")
+            finally:
+                attacker._aoe_hit = False
+            self._on_enemy_attack_after(attacker, None, base_damage)
             return {'type': 'aoe_attack', 'attacker': attacker.name, 'targets': [t.name for t in alive_targets], 'damage': base_damage, 'critical': is_critical, 'attacker_obj': attacker}
 
         if getattr(attacker, 'passive_abilities', None) and 'focus_weak' in attacker.passive_abilities:
@@ -3307,6 +3368,25 @@ class BattleSystem:
         if attacker.passive_skills.get('暗杀者'):
             base_damage = int(base_damage * (1 + target.row * 0.2))
         
+        # 噩梦燃料：目标每种debuff +8%攻击
+        if getattr(attacker, 'passive_abilities', None) and 'nightmare_fuel' in attacker.passive_abilities:
+            debuffs = sum(1 for k in target.status_effects if k in ('poison', 'burn', 'bleed', 'freeze', 'curse', 'sleep', 'paralyze', 'confuse'))
+            base_damage = int(base_damage * (1 + 0.08 * debuffs))
+        
+        # 狙击锁定：连续攻击同一目标伤害递增20%
+        if getattr(attacker, 'passive_abilities', None) and 'stacking_damage' in attacker.passive_abilities:
+            if getattr(attacker, '_last_target_id', None) == target.id:
+                attacker._snipe_stack = min(getattr(attacker, '_snipe_stack', 0) + 1, 5)
+            else:
+                attacker._snipe_stack = 0
+            attacker._last_target_id = target.id
+            base_damage = int(base_damage * (1 + 0.20 * attacker._snipe_stack))
+        
+        # 处决精通：自身HP<50%时获得50%斩杀线
+        if getattr(attacker, '_execute_mastery', False) and attacker.max_health > 0:
+            if attacker.current_health / attacker.max_health < 0.5 and target.current_health / target.max_health < 0.5:
+                base_damage = target.current_health
+        
         is_critical = random.random() < ((BATTLE_CONFIG['critical_rate_base'] + target.row * 0.1) if attacker.passive_skills.get('暗杀者') else BATTLE_CONFIG['critical_rate_base'])
         
         if is_critical:
@@ -3320,7 +3400,52 @@ class BattleSystem:
         if not target.is_alive:
             self.add_log(f"  → {target.name} 死亡!")
         
+        self._on_enemy_attack_after(attacker, target, actual_damage)
+        
         return {'type': 'attack', 'attacker': attacker.name, 'target': target.name, 'damage': actual_damage, 'critical': is_critical, 'attacker_obj': attacker, 'target_obj': target}
+
+    def _on_enemy_attack_after(self, attacker, target, damage):
+        pa = getattr(attacker, 'passive_abilities', None) or []
+        # 噬魂者：击杀目标永久+3%攻击+2%生命
+        if 'soul_eater' in pa and target is not None and not target.is_alive and attacker.is_alive:
+            attacker.attack = int(attacker.attack * 1.03)
+            attacker.max_health = int(attacker.max_health * 1.02)
+            attacker.current_health = min(attacker.current_health + int(attacker.max_health * 0.02), attacker.max_health)
+            self.add_log(f"【{attacker.name}】噬魂! 永久攻击+3%，生命+2%!")
+        # 元素虹吸：技能/攻击造成伤害恢复10%生命
+        if 'elemental_siphon' in pa and damage > 0 and attacker.is_alive:
+            attacker.heal(max(1, int(damage * 0.10)))
+        # 暗影分身：攻击后留下40%属性分身
+        if 'shadow_clone' in pa and attacker.is_alive:
+            self._spawn_shadow_clone(attacker)
+        # 充能爆发：玩家每行动一次获得1层充能
+        if 'tick_charge' in pa and target is not None and target.is_player:
+            attacker._charge = getattr(attacker, '_charge', 0) + 1
+
+    def _spawn_shadow_clone(self, attacker):
+        gs = self.enemy_grid_size
+        occupied = set()
+        for e in self.enemies:
+            if e.is_alive:
+                for op in getattr(e, 'occupied_positions', [e.position]):
+                    occupied.add(op)
+        free = [p for p in range(gs * gs) if p not in occupied]
+        if not free:
+            return
+        data = {
+            'name': attacker.name + '之影',
+            'health': max(1, int(attacker.max_health * 0.4)),
+            'attack': max(1, int(attacker.attack * 0.4)),
+            'defense': max(0, int(attacker.defense * 0.4)),
+            'speed': max(1, int(attacker.speed * 0.6)),
+            'skills': [], 'passive_abilities': [],
+            'width': 1, 'height': 1, 'position': free[0],
+        }
+        clone = Enemy(data, position=free[0], grid_size=gs)
+        self.enemies.append(clone)
+        clone._enemies_ref = self.enemies
+        self._rebuild_unit_cache()
+        self.add_log(f"【{attacker.name}】留下一个暗影分身!")
     
     def _skill_scale(self, base, attacker, scale_ratio=0.5):
         tech_mult = 1 + self.skill_enhance_level * 0.1
@@ -3502,8 +3627,8 @@ class BattleSystem:
         elif skill_type == 'rearrange':
             units = self.enemies if not is_enemy else self.player_team
             target_grid = self.enemy_grid_size if not is_enemy else self.grid_size
-            if not is_enemy and self._formation_locked:
-                self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，但敌方钢铁之阵无法打乱!")
+            if not is_enemy and (self._formation_locked or getattr(self, '_anchor_field', False)):
+                self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，但敌方阵型被锁定无法打乱!")
             else:
                 self._do_rearrange(attacker, units, target_grid, name_prefix, skill_name)
 
@@ -4152,6 +4277,10 @@ class BattleSystem:
 
     def process_enemy_passives(self):
         from battle_config import ENEMY_PASSIVES as _EP
+        self._anchor_field = False
+        self._heal_active = any(a.is_alive and 'heal_reduction' in getattr(a, 'passive_abilities', []) for a in self.enemies)
+        for player in self.player_team:
+            player._heal_penalty = self._heal_active
         for enemy in self.enemies[:]:
             if not enemy.passive_abilities:
                 continue
@@ -4189,6 +4318,48 @@ class BattleSystem:
                             if not player.is_alive:
                                 self.add_log(f"  {player.name} 被复仇之力击杀!")
                     self.add_log(f"【{enemy.name}】复仇! 对全体敌方造成{int(dmg_pct*100)}%最大生命值的伤害!")
+                if 'fire_death' in enemy.passive_abilities:
+                    for player in self.player_team:
+                        if player.is_alive:
+                            player.take_damage(max(1, int(player.max_health * 0.20)))
+                    self.add_log(f"【{enemy.name}】死亡爆炸! 全体玩家受到火焰伤害!")
+                if 'ice_death' in enemy.passive_abilities:
+                    for ally in self.enemies:
+                        if ally.is_alive:
+                            ally.heal(int(ally.max_health * 0.20))
+                    self.add_log(f"【{enemy.name}】冰川破碎! 治疗全体友方!")
+                if 'death_curse' in enemy.passive_abilities:
+                    for player in self.player_team:
+                        if player.is_alive:
+                            d = player.add_status('curse', 3)
+                            if d:
+                                d['damage_mult'] = 1.3
+                    self.add_log(f"【{enemy.name}】死亡诅咒! 全体玩家受伤+30%!")
+                if 'death_explode' in enemy.passive_abilities:
+                    for player in self.player_team:
+                        if player.is_alive:
+                            player.take_damage(max(1, int(player.max_health * 0.30)))
+                    self.add_log(f"【{enemy.name}】殉爆! 对全体玩家造成巨大伤害!")
+                if 'chaos_instability' in enemy.passive_abilities:
+                    effect = random.choice(['explode', 'heal', 'summon', 'curse'])
+                    if effect == 'explode':
+                        for player in self.player_team:
+                            if player.is_alive:
+                                player.take_damage(max(1, int(player.max_health * 0.15)))
+                        self.add_log(f"【{enemy.name}】混沌不稳: 爆炸!")
+                    elif effect == 'heal':
+                        for ally in self.enemies:
+                            if ally.is_alive:
+                                ally.heal(int(ally.max_health * 0.25))
+                        self.add_log(f"【{enemy.name}】混沌不稳: 治疗友方!")
+                    elif effect == 'summon':
+                        self._summon_template_enemy(enemy, 'rift_imp')
+                        self.add_log(f"【{enemy.name}】混沌不稳: 召唤虚空小鬼!")
+                    else:
+                        for player in self.player_team:
+                            if player.is_alive:
+                                player.add_status('curse', 3)
+                        self.add_log(f"【{enemy.name}】混沌不稳: 诅咒!")
 
             if not enemy.is_alive:
                 continue
@@ -4357,5 +4528,286 @@ class BattleSystem:
                                 'value': int(dmg_reduction * 100),
                             }
                     self.add_log(f"【{enemy.name}】虚空领主! 对全体玩家造成{int(hp_pct*100)}%最大生命伤害，友方攻+{int(atk_bonus*100)}%防+{int(dmg_reduction*100)}%!")
+
+                elif pa == 'swarm_rally':
+                    # 每有一个圣甲虫群(堆叠各自计数)，攻击+10%
+                    total = sum(getattr(a, '_swarm_stack', 1) for a in self.enemies if a.is_alive)
+                    base_atk = getattr(enemy, '_swarm_base_atk', enemy._original_attack)
+                    enemy.attack = int(base_atk * (1 + pdata['params']['atk_per_ally'] * total))
+
+                elif pa == 'corrosive_aura':
+                    for player in self.player_team:
+                        if player.is_alive:
+                            d = player.add_status('defense_buff', 2)
+                            if d:
+                                d['value'] = -10
+
+                elif pa == 'convert_debuff':
+                    for key in list(enemy.status_effects.keys()):
+                        if key in ('poison', 'burn', 'bleed', 'curse', 'sleep', 'paralyze', 'confuse', 'freeze'):
+                            del enemy.status_effects[key]
+                            enemy.heal(max(1, int(enemy.max_health * pdata['params']['heal_pct'])))
+                            break
+
+                elif pa == 'mirror_copy':
+                    alive_p = [p for p in self.player_team if p.is_alive]
+                    if alive_p:
+                        enemy.attack = max(alive_p, key=lambda p: p.attack).attack
+
+                elif pa == 'void_growth':
+                    caps = getattr(enemy, '_void_growth_stacks', 0)
+                    if caps < 15:
+                        enemy._void_growth_stacks = caps + 1
+                        enemy.attack = int(enemy.attack * 1.02)
+                        enemy.max_health = int(enemy.max_health * 1.02)
+                        enemy.current_health = min(enemy.current_health + int(enemy.max_health * 0.02), enemy.max_health)
+                        enemy.speed = int(enemy.speed * 1.02)
+
+                elif pa == 'overheat':
+                    stacks = getattr(enemy, '_overheat_stacks', 0)
+                    if stacks < 10:
+                        enemy._overheat_stacks = stacks + 1
+                        enemy.attack = int(enemy.attack * 1.03)
+
+                elif pa == 'shadow_meld':
+                    hp_pct = enemy.current_health / enemy.max_health if enemy.max_health else 1
+                    if hp_pct < pdata['params']['invisible_hp'] and not getattr(enemy, '_meld_used', False):
+                        enemy._meld_used = True
+                        enemy.add_status('invisible', 3)
+                        self.add_log(f"【{enemy.name}】暗影融合，进入隐身!")
+
+                elif pa == 'form_shift_lab':
+                    hp_pct = enemy.current_health / enemy.max_health if enemy.max_health else 1
+                    stage = 2 if hp_pct <= 0.4 else (1 if hp_pct <= 0.7 else 0)
+                    if stage != getattr(enemy, '_form_stage', 0):
+                        enemy._form_stage = stage
+                        if stage == 1:
+                            enemy.attack = int(enemy._original_attack * 1.3)
+                            self.add_log(f"【{enemy.name}】切换攻击形态! 攻击+30%!")
+                        elif stage == 2:
+                            enemy.attack = enemy._original_attack
+                            enemy.defense = int(enemy.defense * 1.3)
+                            enemy.heal(int(enemy.max_health * 0.15))
+                            self.add_log(f"【{enemy.name}】切换防御形态! 防御+30%并恢复15%生命!")
+
+                elif pa == 'lab_overdrive':
+                    hp_pct = enemy.current_health / enemy.max_health if enemy.max_health else 1
+                    if hp_pct < 0.3 and not getattr(enemy, '_overdrive', False):
+                        enemy._overdrive = True
+                        enemy.attack = int(enemy.attack * 1.5)
+                        enemy.defense = int(enemy.defense * 0.7)
+                        self.add_log(f"【{enemy.name}】过载模式! 攻击+50%，防御-30%!")
+
+                elif pa == 'primordial_chaos':
+                    hp_pct = enemy.current_health / enemy.max_health if enemy.max_health else 1
+                    phase = 0 if hp_pct > 0.66 else (1 if hp_pct > 0.33 else 2)
+                    if phase != getattr(enemy, '_chaos_phase', 0):
+                        enemy._chaos_phase = phase
+                        if phase == 1:
+                            enemy.attack = int(enemy.attack * 1.2)
+                            self.add_log(f"【{enemy.name}】进入第二阶段! 攻击+20%!")
+                        elif phase == 2:
+                            enemy.attack = int(enemy.attack * 1.5)
+                            for key in list(enemy.status_effects.keys()):
+                                if key in ('poison', 'burn', 'bleed', 'curse', 'sleep', 'paralyze', 'confuse', 'freeze'):
+                                    del enemy.status_effects[key]
+                            self.add_log(f"【{enemy.name}】进入最终阶段! 攻击+50%并净化自身!")
+
+                elif pa == 'split_merge':
+                    hp_pct = enemy.current_health / enemy.max_health if enemy.max_health else 1
+                    if hp_pct < 0.5 and not getattr(enemy, '_split_done', False):
+                        enemy._split_done = True
+                        self._split_enemy(enemy)
+
+                elif pa == 'gate_guard':
+                    tick = getattr(enemy, '_gate_tick', 0) + 1
+                    enemy._gate_tick = tick
+                    if tick >= 30:
+                        enemy._gate_tick = 0
+                        self._summon_template_enemy(enemy, 'ruins_warrior')
+                        self.add_log(f"【{enemy.name}】门扉开启，召唤古代战士!")
+
+                elif pa == 'void_rift_lord':
+                    has_tentacle = any('触须' in a.name and a.is_alive for a in self.enemies)
+                    enemy._rift_guard = has_tentacle
+                    if not has_tentacle:
+                        self._summon_template_enemy(enemy, 'rift_tentacle')
+
+                elif pa == 'static_field':
+                    if random.random() < 0.05:
+                        alive_p = [p for p in self.player_team if p.is_alive]
+                        if alive_p:
+                            t = random.choice(alive_p)
+                            t.take_damage(enemy.attack, enemy)
+                            self.add_log(f"【{enemy.name}】静电场! 雷击 {t.name}!")
+
+                elif pa == 'void_radiance':
+                    for player in self.player_team:
+                        if player.is_alive:
+                            dmg = max(1, int(player.max_health * 0.01))
+                            player.take_damage(dmg)
+
+                elif pa == 'entropic_aura':
+                    if random.random() < 0.05:
+                        alive_p = [p for p in self.player_team if p.is_alive]
+                        if alive_p:
+                            t = random.choice(alive_p)
+                            debuff = random.choice(['poison', 'paralyze', 'sleep', 'curse'])
+                            t.add_status(debuff, 2, enemy.attack)
+
+                elif pa == 'curse_spread':
+                    for player in self.player_team:
+                        if player.is_alive and random.random() < 0.05:
+                            debuff = random.choice(['poison', 'paralyze', 'sleep', 'curse'])
+                            player.add_status(debuff, 2, enemy.attack)
+
+                elif pa == 'time_drain':
+                    for player in self.player_team:
+                        if player.is_alive:
+                            player.action_bar = max(0, player.action_bar - 0.5)
+
+                elif pa == 'fear_aura':
+                    for player in self.player_team:
+                        if player.is_alive:
+                            player.action_bar = max(0, player.action_bar - 0.3)
+
+                elif pa == 'anchor_field':
+                    self._anchor_field = True
+
+                elif pa == 'heal_reduction':
+                    for player in self.player_team:
+                        player._heal_penalty = True
+
+                elif pa == 'protect_ally':
+                    weak = min((a for a in self.enemies if a.is_alive and a is not enemy),
+                               key=lambda a: a.current_health, default=None)
+                    if weak is not None:
+                        prev = getattr(enemy, '_protect_prev', weak.max_health)
+                        lost = prev - weak.current_health
+                        enemy._protect_prev = weak.current_health
+                        if lost > 0 and enemy.is_alive:
+                            transfer = max(1, lost // 2)
+                            weak.heal(transfer)
+                            enemy.take_damage(transfer)
+
+                elif pa == 'tick_charge':
+                    if getattr(enemy, '_charge', 0) >= 10:
+                        enemy._charge = 0
+                        for player in self.player_team:
+                            if player.is_alive:
+                                dmg = max(1, int(enemy.attack * 1.5))
+                                player.take_damage(dmg)
+                        self.add_log(f"【{enemy.name}】充能爆发! 对全体玩家造成巨大伤害!")
+
+                elif pa == 'toxic_residue':
+                    self._toxic_zone = True
+
+                elif pa == 'death_zone':
+                    self._death_zone = True
+
+        # 幻影分身：受击标记产生分身
+        for enemy in self.enemies[:]:
+            if enemy.is_alive and getattr(enemy, '_mirage_pending', False):
+                enemy._mirage_pending = False
+                alive_clones = sum(1 for a in self.enemies if a.is_alive and '幻影' in a.name)
+                if alive_clones < 2:
+                    self._spawn_mirage_clone(enemy)
+
+        # 死亡毒区/毒区残留：每回合对玩家造成伤害
+        if getattr(self, '_death_zone', False):
+            for player in self.player_team:
+                if player.is_alive:
+                    player.take_damage(max(1, int(player.max_health * 0.01)))
+        if getattr(self, '_toxic_zone', False):
+            for player in self.player_team:
+                if player.is_alive:
+                    player.add_status('poison', 3, 25)
+
+    def _summon_template_enemy(self, host, template_key):
+        from battle_config import ENEMY_TEMPLATES as _ET
+        tmpl = _ET.get(template_key)
+        if not tmpl:
+            return None
+        gs = self.enemy_grid_size
+        occupied = set()
+        for e in self.enemies:
+            if e.is_alive:
+                for op in getattr(e, 'occupied_positions', [e.position]):
+                    occupied.add(op)
+        free = [p for p in range(gs * gs) if p not in occupied]
+        if not free:
+            return None
+        data = {
+            'name': tmpl['name'],
+            'health': int(tmpl['base_health'] * 0.8),
+            'attack': int(tmpl['base_attack'] * 0.8),
+            'defense': int(tmpl['base_defense'] * 0.8),
+            'speed': int(tmpl['base_speed'] * 0.8),
+            'skills': list(tmpl.get('skills_pool', [])[:1]),
+            'passive_abilities': [],
+            'width': 1, 'height': 1, 'position': free[0],
+        }
+        new_e = Enemy(data, position=free[0], grid_size=gs)
+        self.enemies.append(new_e)
+        new_e._enemies_ref = self.enemies
+        self._rebuild_unit_cache()
+        return new_e
+
+    def _spawn_mirage_clone(self, host):
+        gs = self.enemy_grid_size
+        occupied = set()
+        for e in self.enemies:
+            if e.is_alive:
+                for op in getattr(e, 'occupied_positions', [e.position]):
+                    occupied.add(op)
+        free = [p for p in range(gs * gs) if p not in occupied]
+        if not free:
+            return None
+        data = {
+            'name': f'{host.name}幻影',
+            'health': max(1, int(host.max_health * 0.3)),
+            'attack': max(1, int(host.attack * 0.6)),
+            'defense': max(0, int(host.defense * 0.6)),
+            'speed': max(1, host.speed),
+            'skills': [], 'passive_abilities': [],
+            'width': 1, 'height': 1, 'position': free[0],
+        }
+        clone = Enemy(data, position=free[0], grid_size=gs)
+        self.enemies.append(clone)
+        clone._enemies_ref = self.enemies
+        self._rebuild_unit_cache()
+        self.add_log(f"【{host.name}】产生幻影分身!")
+        return clone
+
+    def _split_enemy(self, host):
+        gs = self.enemy_grid_size
+        occupied = set()
+        for e in self.enemies:
+            if e.is_alive:
+                for op in getattr(e, 'occupied_positions', [e.position]):
+                    occupied.add(op)
+        free = [p for p in range(gs * gs) if p not in occupied]
+        spawned = 0
+        for i in range(2):
+            if not free:
+                break
+            pos = free.pop(0)
+            data = {
+                'name': f'{host.name}小型体',
+                'health': max(1, int(host.max_health * 0.5)),
+                'attack': max(1, int(host.attack * 0.5)),
+                'defense': max(0, int(host.defense * 0.5)),
+                'speed': max(1, host.speed),
+                'skills': list(getattr(host, 'skills', [])),
+                'passive_abilities': [],
+                'width': 1, 'height': 1, 'position': pos,
+            }
+            child = Enemy(data, position=pos, grid_size=gs)
+            self.enemies.append(child)
+            child._enemies_ref = self.enemies
+            spawned += 1
+        if spawned:
+            self._rebuild_unit_cache()
+            self.add_log(f"【{host.name}】分裂成 {spawned} 个小型体!")
 
 

@@ -143,6 +143,13 @@ def _on_spawn(bs, enemy):
                 enemy.passive_abilities.append(pa)
     if 'swarm_stack' in ids and '圣甲虫' in enemy.name:
         enemy._swarm_stack = 3
+        enemy._swarm_base_hp = max(1, enemy.max_health // 3)
+        enemy.max_health = enemy._swarm_base_hp * 3
+        enemy.current_health = enemy.max_health
+        enemy._swarm_base_name = enemy.name
+        enemy._swarm_base_atk = enemy.attack
+        enemy._swarm_base_spd = enemy.speed
+        enemy._update_swarm_display()
     if 'elem_resistance' in ids or 'elem_domain' in ids:
         key = getattr(enemy, 'template_key', '')
         if key in ELEMENTAL_KEYS:
@@ -594,6 +601,13 @@ def process_tick(bs):
             if p.is_alive:
                 p.add_status('poison', 3, 10)
 
+    # 虫附于身：附着在单位上的圣甲虫群每回合对玩家造成中毒
+    attached = sum(getattr(e, '_attached_swarms', 0) for e in bs.enemies if e.is_alive)
+    if attached > 0:
+        for p in bs.player_team:
+            if p.is_alive:
+                p.add_status('poison', 3, 10)
+
     if 'swarm_reproduce' in ids or 'rapid_reproduce' in ids:
         fs['swarm_tick'] = fs.get('swarm_tick', 0) + 1
         interval = 1 if 'rapid_reproduce' in ids else 3
@@ -694,7 +708,18 @@ def _reproduce_swarm(bs, scarab):
         stack = getattr(scarab, '_swarm_stack', 1)
         if stack < 5:
             scarab._swarm_stack = stack + 1
-            bs.add_log(f'[因子] 圣甲虫群繁衍 (x{stack + 1})!')
+            scarab.max_health = scarab._swarm_base_hp * scarab._swarm_stack
+            scarab.current_health = min(scarab.current_health + scarab._swarm_base_hp, scarab.max_health)
+            scarab._update_swarm_display()
+            bs.add_log(f'[因子] 圣甲虫群繁衍 ({scarab.name})!')
+            return
+    # 格子堆满或未开启堆叠：尝试新格子，虫附于身时允许附在任意单位上
+    if 'swarm_attach' in bs._factor_ids:
+        hosts = [e for e in bs.enemies if e.is_alive and '圣甲虫' not in e.name]
+        if hosts:
+            host = random.choice(hosts)
+            host._attached_swarms = getattr(host, '_attached_swarms', 0) + 1
+            bs.add_log(f'[因子] 圣甲虫群附着在 {host.name} 上!')
             return
     spawn_enemy(bs, 'ruins_scarab', position=scarab.position, scale=0.6)
 
