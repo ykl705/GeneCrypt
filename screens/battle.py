@@ -441,7 +441,9 @@ class BattleScreen(Screen):
         nc = (0.2, 0.7, 1, 1) if is_player else (1, 0.3, 0.3, 1)
 
         hp_pct = unit.current_health / max(unit.max_health, 1)
-        if hp_pct > 0.5:
+        if unit.has_status('poison'):
+            hp_c = (0.7, 0.25, 1, 1)
+        elif hp_pct > 0.5:
             hp_c = (0.2, 0.9, 0.2, 1)
         elif hp_pct > 0.25:
             hp_c = (1, 0.8, 0.2, 1)
@@ -598,6 +600,7 @@ class BattleScreen(Screen):
             if unit:
                 max_bar_val = BATTLE_CONFIG['action_bar_max']
                 unit.action_bar -= max_bar_val
+                bs.process_poison_on_action(unit)
 
                 if unit.is_player and not bs.is_auto:
                     if bs.marked_target:
@@ -681,7 +684,9 @@ class BattleScreen(Screen):
             if unit is None:
                 continue
             hp_pct = unit.current_health / max(unit.max_health, 1)
-            if hp_pct > 0.5:
+            if unit.has_status('poison'):
+                hp_c = (0.7, 0.25, 1, 1)
+            elif hp_pct > 0.5:
                 hp_c = (0.2, 0.9, 0.2, 1)
             elif hp_pct > 0.25:
                 hp_c = (1, 0.8, 0.2, 1)
@@ -776,6 +781,12 @@ class BattleScreen(Screen):
                     card = app.game.generate_low_quality_card(gender=g)
                     if card:
                         self.add_log(f'[精灵] 战后获得低质量卡牌 {card.name}!')
+            if random.random() < 0.20 + stage_num * 0.001:
+                if len(app.game.cards) < app.game.effective_max_cards:
+                    drop = app.game.create_drop_card(stage_num)
+                    if drop:
+                        app.game.cards.append(drop)
+                        self.add_log(f'[掉落] 获得卡牌 {drop.name} 技能: {", ".join(drop.skills) if drop.skills else "无"} (质量{round(drop.genome_quality, 2)})!')
             self._reward_box.clear_widgets()
             reward_text = f'奖励: 🧬+{gacha_reward} 🧱+{mat_reward} 精华+{essence_reward}'
             self._reward_box.add_widget(Label(text=reward_text, color=(1, 1, 0.6, 1)))

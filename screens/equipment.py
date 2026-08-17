@@ -170,6 +170,20 @@ class EquipmentScreen(Screen):
             lines = [item.get('name', '?')]
             lines.append(f'稀有度: {rinfo["name"]}')
             lines.append(f'部位: {EQUIPMENT_SLOT_NAMES.get(item.get("slot",""),"?")}')
+            main = item.get('main_stat')
+            if main:
+                mname = AFFIX_CODE_NAMES.get(main.get('stat', '').upper()[:3], main.get('stat', '?'))
+                stat_cn = {'attack': '攻击', 'health': '生命', 'defense': '防御', 'speed': '速度',
+                            'critical_rate': '暴击率', 'dodge_rate': '闪避率'}
+                mname = stat_cn.get(main.get('stat', ''), mname)
+                lines.append(f'★主属性: {mname} +{main.get("value", 0)}')
+            sp = item.get('special')
+            if sp:
+                sp_names = {'skill_dmg': '技能伤害', 'extra_targets': '技能额外目标',
+                            'status_duration': '状态持续回合', 'ignore_distance': '无视距离限制'}
+                lines.append(f'◆特殊: {sp_names.get(sp["kind"], sp["kind"])} +{sp.get("value", 1)}')
+            if item.get('set_id'):
+                lines.append(f'套装件: {item["set_id"]}')
             lines.append('--- 词条 ---')
             for aff in item.get('affixes', []):
                 code = aff.get('code', '?')

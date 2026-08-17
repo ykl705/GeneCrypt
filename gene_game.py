@@ -580,6 +580,11 @@ class Card:
             for slot, item in eq.items():
                 if not isinstance(item, dict):
                     continue
+                main = item.get('main_stat')
+                if main:
+                    stat = main.get('stat', '')
+                    if stat in traits:
+                        traits[stat] = traits[stat] + main.get('value', 0)
                 affixes = item.get('affixes', [])
                 for aff in affixes:
                     stat = aff.get('stat', '')
@@ -998,6 +1003,54 @@ class Game:
         card.traits['critical_rate'] = 3
         card.traits['dodge_rate'] = 2
         card.traits['lifespan'] = 50
+        return card
+
+    def create_drop_card(self, stage_num):
+        """关卡随机掉落卡牌：技能按关卡等级从分级池中选取（不含抽卡限定）"""
+        from gene_config import SKILL_TIER_POOLS
+        tier = 5 if stage_num > 160 else (4 if stage_num > 100 else (3 if stage_num > 60 else (2 if stage_num > 30 else 1)))
+        pool = SKILL_TIER_POOLS.get(tier, SKILL_TIER_POOLS.get(1, []))
+        if tier > 1 and random.random() < 0.25:
+            pool = SKILL_TIER_POOLS.get(tier - 1, pool)
+        names = ['野性突袭者', '基因拾荒者', '战场新兵', '流亡实验体', '丛林捕食者',
+                 '沙漠行者', '深渊拾荒者', '风暴猎手', '熔岩行者', '冰原潜行者',
+                 '沼泽异兽', '雷暴之翼', '幽影掠食者']
+        card = Card(f'{random.choice(names)}{random.randint(10, 99)}', random.choice(['male', 'female']))
+        if not card.is_alive:
+            return None
+        for gene_name in SKILL_GENES:
+            gd = card.genes.get(gene_name)
+            if not gd:
+                continue
+            gd['allele1']['is_dominant'] = False
+            gd['allele2']['is_dominant'] = False
+            chr_id = gd.get('chromosome', 'chr1')
+            if chr_id == 'chrY':
+                chr_id = 'chrX'
+            for h in card.chromosomes.get(chr_id, []):
+                dom = h.get('is_dominant')
+                if dom and gene_name in dom:
+                    dom[gene_name] = False
+        n_skills = random.randint(1, 2)
+        for sname in random.sample(pool, min(n_skills, len(pool))):
+            for gene_name, tmpl in GENE_TEMPLATES.items():
+                if tmpl.get('skill_name') == sname and gene_name in card.genes:
+                    gd = card.genes[gene_name]
+                    gd['allele1']['is_dominant'] = True
+                    gd['allele2']['is_dominant'] = True
+                    chr_id = gd.get('chromosome', 'chr1')
+                    if chr_id == 'chrY':
+                        chr_id = 'chrX'
+                    for h in card.chromosomes.get(chr_id, []):
+                        dom = h.get('is_dominant')
+                        if dom and gene_name in dom:
+                            dom[gene_name] = True
+                    break
+        card.skills = card.get_skills()
+        card.passive_skills = card.get_passive_skills()
+        q = min(0.6, 0.15 + stage_num * 0.0025)
+        card.genome_quality = q
+        card.traits = card.calculate_traits()
         return card
 
     def create_initial_cards(self):
@@ -1791,6 +1844,23 @@ class Game:
             'id': item_id, 'slot': slot, 'rarity': chosen_rarity['id'],
             'name': real_name, 'affixes': affixes,
         }
+        # 主属性：每部位从专属池子抽取，加成远大于小词条
+        from gene_config import EQUIPMENT_MAIN_POOLS, EQUIPMENT_MAIN_VALUES
+        main_pool = EQUIPMENT_MAIN_POOLS.get(slot, ['attack'])
+        main_stat = random.choice(main_pool)
+        lo, hi = EQUIPMENT_MAIN_VALUES.get(chosen_rarity['id'], (10, 20))
+        main_val = random.randint(lo, hi)
+        if main_stat == 'health':
+            main_val *= 5
+        elif main_stat in ('critical_rate', 'dodge_rate'):
+            main_val = max(2, main_val // 15)
+        item['main_stat'] = {'stat': main_stat, 'value': main_val}
+        # 高品质装备附带技能机制增强词条
+        from gene_config import EQUIPMENT_SPECIALS, EQUIPMENT_SPECIAL_CHANCE
+        specials_pool = EQUIPMENT_SPECIALS.get(chosen_rarity['id'])
+        if specials_pool and random.random() < EQUIPMENT_SPECIAL_CHANCE.get(chosen_rarity['id'], 0):
+            kind, s_lo, s_hi = random.choice(specials_pool)
+            item['special'] = {'kind': kind, 'value': random.randint(s_lo, s_hi)}
         if random.random() < 0.25:
             from gene_config import SET_BONUSES
             item['set_id'] = random.choice(list(SET_BONUSES.keys()))
@@ -2199,6 +2269,8 @@ class Game:
                 card._rarity = 'normal'
             
             results.append(card)
+            if len(self.cards) < self.effective_max_cards:
+                self.cards.append(card)
             
             roll_bonus = random.random()
             if roll_bonus < 0.08:
@@ -2718,6 +2790,24 @@ class BattleCard:
         self.passive_abilities = []
         self.reflex_bound_skill = getattr(card, 'reflex_bound_skill', None)
         self.set_ids = list(getattr(card, '_active_set_ids', []) or [])
+        gear = {}
+        for slot, item in (getattr(card, 'equipment', {}) or {}).items():
+            if not isinstance(item, dict):
+                continue
+            sp = item.get('special')
+            if not sp:
+                continue
+            kind = sp['kind']
+            val = sp['value']
+            if kind == 'extra_targets':
+                gear['extra_targets'] = gear.get('extra_targets', 0) + val
+            elif kind == 'skill_dmg':
+                gear['skill_dmg'] = gear.get('skill_dmg', 0) + val
+            elif kind == 'ignore_distance':
+                gear['ignore_distance'] = True
+            elif kind == 'status_duration':
+                gear['status_duration'] = gear.get('status_duration', 0) + val
+        self.gear_specials = gear
     
     def take_damage(self, damage, attacker=None):
         if self.has_status('evade'):
@@ -2761,6 +2851,8 @@ class BattleCard:
         return actual_damage
     
     def heal(self, amount):
+        if getattr(self, '_heal_block', False):
+            return
         if getattr(self, '_heal_penalty', False):
             amount = int(amount * 0.5)
         self.current_health = min(self.current_health + amount, self.max_health)
@@ -3002,6 +3094,8 @@ class Enemy:
         return actual_damage
     
     def heal(self, amount):
+        if getattr(self, '_heal_block', False):
+            return
         self.current_health = min(self.current_health + amount, self.max_health)
 
     def _update_swarm_display(self):
@@ -3282,6 +3376,8 @@ class BattleSystem:
                 back = [u for u in alive if u.row == row]
                 if back:
                     return random.choice(back)
+        if attacker and (getattr(attacker, 'gear_specials', {}) or {}).get('ignore_distance'):
+            return random.choice(alive)
         if alive[0].is_player:
             cols = list(range(gs - 1, -1, -1))
         else:
@@ -3449,7 +3545,16 @@ class BattleSystem:
     
     def _skill_scale(self, base, attacker, scale_ratio=0.5):
         tech_mult = 1 + self.skill_enhance_level * 0.1
+        gs = getattr(attacker, 'gear_specials', {}) or {}
+        tech_mult *= 1 + gs.get('skill_dmg', 0) / 100.0
         return int((base + attacker.attack * scale_ratio) * tech_mult)
+
+    def _gear_extra_targets(self, attacker):
+        return (getattr(attacker, 'gear_specials', {}) or {}).get('extra_targets', 0)
+
+    def _add_status_geared(self, attacker, unit, status_name, turns, atk=0):
+        extra = (getattr(attacker, 'gear_specials', {}) or {}).get('status_duration', 0)
+        return unit.add_status(status_name, turns + extra, atk)
 
     def _apply_assassin_bonus(self, damage, attacker, target):
         if attacker.passive_skills.get('暗杀者'):
@@ -3516,7 +3621,7 @@ class BattleSystem:
             damage = self._apply_assassin_bonus(damage, attacker, target)
             actual_damage = target.take_damage(damage, attacker)
             turns = skill_effect.get('turns', 5)
-            target.add_status('poison', turns, attacker.attack)
+            self._add_status_geared(attacker, target, 'poison', turns, attacker.attack)
             self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，造成 {actual_damage} 伤害，附加中毒效果!")
         
         elif skill_type == 'shield':
@@ -3583,17 +3688,17 @@ class BattleSystem:
         
         elif skill_type == 'sleep':
             turns = skill_effect.get('turns', 2)
-            target.add_status('sleep', turns)
+            self._add_status_geared(attacker, target, 'sleep', turns)
             self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，{target.name} 陷入睡眠!")
         
         elif skill_type == 'paralyze':
             turns = skill_effect.get('turns', 2)
-            target.add_status('paralyze', turns)
+            self._add_status_geared(attacker, target, 'paralyze', turns)
             self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，{target.name} 被麻痹!")
         
         elif skill_type == 'confuse':
             turns = skill_effect.get('turns', 2)
-            target.add_status('confuse', turns)
+            self._add_status_geared(attacker, target, 'confuse', turns)
             self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，{target.name} 陷入混乱!")
         
         elif skill_type == 'invisible':
@@ -3642,7 +3747,7 @@ class BattleSystem:
         elif skill_type == 'heal_team':
             team = self.player_team if attacker.is_player else self.enemies
             alive = [u for u in team if u.is_alive]
-            targets_count = skill_effect.get('targets', 3)
+            targets_count = skill_effect.get('targets', 3) + self._gear_extra_targets(attacker)
             targets_heal = random.sample(alive, min(targets_count, len(alive)))
             heal_val = self._skill_scale(skill_effect.get('base_heal', 25), attacker, 0.4)
             if is_enemy:
@@ -3660,23 +3765,23 @@ class BattleSystem:
             turns = skill_effect.get('turns', 1)
             if 'frost_heart' in getattr(attacker, 'set_ids', []):
                 turns += 1
-            target.add_status('freeze', turns)
+            self._add_status_geared(attacker, target, 'freeze', turns)
             self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，{target.name} 被冻结{turns}回合!")
 
         elif skill_type == 'curse':
             turns = skill_effect.get('turns', 3)
-            target.add_status('curse', turns)
-            if 'curse' in target.status_effects:
+            d = self._add_status_geared(attacker, target, 'curse', turns)
+            if d:
                 dmg_mult = skill_effect.get('damage_mult', 1.5)
-                target.status_effects['curse']['damage_mult'] = dmg_mult
+                d['damage_mult'] = dmg_mult
             self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，{target.name} 受到诅咒，伤害加深!")
 
         elif skill_type == 'burn':
             turns = skill_effect.get('turns', 3)
-            target.add_status('burn', turns)
-            if 'burn' in target.status_effects:
+            d = self._add_status_geared(attacker, target, 'burn', turns)
+            if d:
                 max_hp_pct = skill_effect.get('max_hp_pct', 0.15)
-                target.status_effects['burn']['max_hp_pct'] = max_hp_pct
+                d['max_hp_pct'] = max_hp_pct
             self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，{target.name} 被灼烧!")
 
         elif skill_type == 'execute':
@@ -3692,7 +3797,7 @@ class BattleSystem:
                 self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，对 {target.name} 造成 {actual_damage} 点伤害!")
 
         elif skill_type == 'aoe_poison':
-            targets_count = skill_effect.get('targets', 3)
+            targets_count = skill_effect.get('targets', 3) + self._gear_extra_targets(attacker)
             team = self.player_team if is_enemy else self.enemies
             alive = [u for u in team if u.is_alive]
             poison_targets = random.sample(alive, min(targets_count, len(alive)))
@@ -3702,7 +3807,7 @@ class BattleSystem:
                 damage = self._skill_scale(base_damage, attacker, 0.3)
                 damage = self._apply_assassin_bonus(damage, attacker, t)
                 actual_damage = t.take_damage(damage, attacker)
-                t.add_status('poison', turns, attacker.attack)
+                self._add_status_geared(attacker, t, 'poison', turns, attacker.attack)
                 self.add_log(f"  → {t.name} 受到 {actual_damage} 伤害并中毒!")
             self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，毒雾扩散!")
 
@@ -4062,6 +4167,323 @@ class BattleSystem:
                 p.col = new_pos % target_grid
             self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，传送扰乱敌方阵型!")
 
+        elif skill_type == 'aoe_damage':
+            team = self.enemies if is_enemy else self.player_team
+            alive = [u for u in team if u.is_alive]
+            targets_count = skill_effect.get('targets', len(alive) or 1) + self._gear_extra_targets(attacker)
+            hit = random.sample(alive, min(targets_count, len(alive)))
+            for t in hit:
+                dmg = self._skill_scale(skill_effect.get('base_damage', 20), attacker, 0.4)
+                dmg = self._apply_assassin_bonus(dmg, attacker, t)
+                actual = t.take_damage(dmg, attacker)
+                self.add_log(f"  → {t.name} 受到 {actual} 点溅射伤害{' 死亡!' if not t.is_alive else ''}")
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]!")
+
+        elif skill_type == 'convert_debuff_damage':
+            base_damage = self._skill_scale(skill_effect.get('base_damage', 12), attacker, 0.4)
+            debuffs = [k for k in target.status_effects if k in ('poison', 'burn', 'bleed', 'freeze', 'curse', 'sleep', 'paralyze', 'confuse')]
+            total = base_damage + len(debuffs) * skill_effect.get('heal_per_debuff', 20)
+            actual = target.take_damage(total, attacker)
+            attacker.heal(len(debuffs) * skill_effect.get('heal_per_debuff', 20))
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，造成 {actual} 伤害，净化{len(debuffs)}个debuff并治疗!")
+
+        elif skill_type == 'taunt_shield':
+            shield_value = self._skill_scale(skill_effect.get('shield_value', 35), attacker, 0.4)
+            attacker.shield += shield_value
+            if is_enemy:
+                self.marked_target = attacker
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，嘲讽对方并获得 {shield_value} 护盾!")
+
+        elif skill_type == 'berserk_burst':
+            attacker.take_damage(max(1, attacker.current_health // 5))
+            d = attacker.add_status('attack_buff', 3)
+            if d:
+                d['value'] = 50
+            base_damage = self._skill_scale(skill_effect.get('base_damage', 30), attacker, 0.5)
+            actual = target.take_damage(base_damage, attacker)
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，自损生命，攻击+50%，造成 {actual} 伤害!")
+
+        elif skill_type == 'petrify':
+            shield_value = int(attacker.max_health * skill_effect.get('shield_pct', 0.30))
+            attacker.shield += shield_value
+            d = attacker.add_status('defense_buff', skill_effect.get('turns', 2))
+            if d:
+                d['value'] = 50
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，石化自身获得 {shield_value} 护盾与50%减伤!")
+
+        elif skill_type == 'lock_snipe':
+            team = self.enemies if is_enemy else self.player_team
+            alive = [u for u in team if u.is_alive]
+            weak = min(alive, key=lambda u: u.current_health) if alive else target
+            base_damage = self._skill_scale(skill_effect.get('base_damage', 35), attacker, 0.5)
+            if getattr(attacker, '_snipe_last', None) is weak:
+                attacker._snipe_stack = getattr(attacker, '_snipe_stack', 0) + 1
+            else:
+                attacker._snipe_stack = 0
+            attacker._snipe_last = weak
+            base_damage = int(base_damage * (1 + skill_effect.get('stack_pct', 0.20) * attacker._snipe_stack))
+            actual = weak.take_damage(base_damage, attacker)
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，狙击 {weak.name} 造成 {actual} 伤害(叠加{attacker._snipe_stack})!")
+
+        elif skill_type == 'curse_aoe':
+            team = self.enemies if is_enemy else self.player_team
+            turns = skill_effect.get('turns', 2)
+            for u in team:
+                if u.is_alive:
+                    debuff = random.choice(['poison', 'paralyze', 'sleep', 'curse'])
+                    u.add_status(debuff, turns, attacker.attack)
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，全体附加随机负面效果!")
+
+        elif skill_type == 'slow_all':
+            team = self.enemies if is_enemy else self.player_team
+            bar_reduce = skill_effect.get('bar_reduce', 20)
+            for u in team:
+                if u.is_alive:
+                    u.action_bar = max(0, u.action_bar - bar_reduce)
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，降低全体行动条{bar_reduce}!")
+
+        elif skill_type == 'judgment':
+            charge = getattr(attacker, '_charge', 0)
+            attacker._charge = 0
+            base_damage = self._skill_scale(skill_effect.get('base_damage', 20), attacker, 0.5)
+            base_damage += charge * skill_effect.get('per_charge_dmg', 8)
+            actual = target.take_damage(base_damage, attacker)
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，消耗{charge}层充能，造成 {actual} 伤害!")
+
+        elif skill_type == 'void_pull':
+            base_damage = self._skill_scale(skill_effect.get('base_damage', 15), attacker, 0.4)
+            actual = target.take_damage(base_damage, attacker)
+            if is_enemy:
+                gs = self.grid_size
+                back_col = gs - 1
+                if target.col != back_col:
+                    free = [p for p in range(gs * gs) if p % gs == back_col]
+                    occupied = {u.position for u in self.player_team if u.is_alive}
+                    free = [p for p in free if p not in occupied]
+                    if free:
+                        pos = free[0]
+                        target.position = pos
+                        target.row = pos // gs
+                        target.col = pos % gs
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，牵引目标并造成 {actual} 伤害!")
+
+        elif skill_type == 'backstab':
+            team = self.enemies if is_enemy else self.player_team
+            alive = [u for u in team if u.is_alive]
+            weak = min(alive, key=lambda u: u.current_health) if alive else target
+            lost_pct = 1 - weak.current_health / max(weak.max_health, 1)
+            base_damage = self._skill_scale(skill_effect.get('base_damage', 28), attacker, 0.5)
+            base_damage = int(base_damage * (1 + skill_effect.get('bonus_per_lost_hp', 0.5) * lost_pct))
+            actual = weak.take_damage(base_damage, attacker)
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，背刺 {weak.name} 造成 {actual} 伤害!")
+
+        elif skill_type == 'chaos_curse':
+            turns = skill_effect.get('turns', 3)
+            debuff = random.choice(['poison', 'paralyze', 'sleep', 'curse', 'confuse', 'burn'])
+            target.add_status(debuff, turns, attacker.attack)
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，{target.name} 中了 {debuff}!")
+
+        elif skill_type == 'copy_stats':
+            team = self.enemies if is_enemy else self.player_team
+            alive = [u for u in team if u.is_alive]
+            if alive:
+                strongest = max(alive, key=lambda u: u.attack)
+                attacker.attack = strongest.attack
+                turns = skill_effect.get('turns', 2)
+                d = attacker.add_status('attack_buff', turns)
+                if d:
+                    d['value'] = 0
+                self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，复制了 {strongest.name} 的攻击力!")
+
+        elif skill_type == 'void_storm':
+            team = self.enemies if is_enemy else self.player_team
+            for u in team:
+                if u.is_alive:
+                    dmg = self._skill_scale(skill_effect.get('base_damage', 20), attacker, 0.4)
+                    dmg += int(u.max_health * skill_effect.get('hp_pct', 0.08))
+                    actual = u.take_damage(dmg, attacker)
+                    self.add_log(f"  → {u.name} 受到 {actual} 虚空风暴伤害!")
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]!")
+
+        elif skill_type == 'chain_lightning':
+            team = self.enemies if is_enemy else self.player_team
+            alive = [u for u in team if u.is_alive]
+            if alive:
+                start = target if target in alive else random.choice(alive)
+            else:
+                start = None
+            current = start
+            dmg = self._skill_scale(skill_effect.get('base_damage', 22), attacker, 0.5)
+            hit_units = []
+            for _ in range(skill_effect.get('bounces', 3) + self._gear_extra_targets(attacker)):
+                if current is None or not current.is_alive:
+                    break
+                actual = current.take_damage(dmg, attacker)
+                hit_units.append(current)
+                current.add_status('paralyze', skill_effect.get('paralyze_turns', 1))
+                dmg = int(dmg * skill_effect.get('falloff', 0.7))
+                others = [u for u in alive if u.is_alive and u not in hit_units]
+                current = random.choice(others) if others else None
+                self.add_log(f"  ⚡ 闪电命中 {hit_units[-1].name} 造成 {actual} 伤害并麻痹!")
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]!")
+
+        elif skill_type == 'earthquake':
+            team = self.enemies if is_enemy else self.player_team
+            hp_pct = skill_effect.get('hp_pct', 0.12)
+            for u in team:
+                if u.is_alive:
+                    dmg = max(1, int(u.current_health * hp_pct))
+                    u.take_damage(dmg)
+                    self.add_log(f"  → {u.name} 受到 {dmg} 地震伤害!")
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]!")
+
+        elif skill_type == 'fear':
+            bar_rewind = skill_effect.get('bar_rewind', 30)
+            target.action_bar = max(0, target.action_bar - bar_rewind)
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，{target.name} 行动条倒退{bar_rewind}!")
+
+        elif skill_type == 'nightmare':
+            if target.has_status('sleep'):
+                dmg = max(1, int(target.max_health * skill_effect.get('sleep_hp_pct', 0.15)))
+            else:
+                dmg = self._skill_scale(skill_effect.get('base_damage', 15), attacker, 0.4)
+            actual = target.take_damage(dmg, attacker)
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，对 {target.name} 造成 {actual} 伤害!")
+
+        elif skill_type == 'heal_block_curse':
+            turns = skill_effect.get('turns', 3)
+            d = target.add_status('curse', turns)
+            if d:
+                d['damage_mult'] = 1.0
+            target._heal_block = True
+            target._heal_block_turns = turns
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，{target.name} 无法被治疗{turns}回合!")
+
+        elif skill_type == 'shield_self':
+            shield_value = self._skill_scale(skill_effect.get('shield_value', 60), attacker, 0.4)
+            attacker.shield += shield_value
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，获得 {shield_value} 护盾!")
+
+        elif skill_type == 'buff_team':
+            atk_bonus = skill_effect.get('atk_bonus', 0.25)
+            def_bonus = skill_effect.get('def_bonus', 0.25)
+            turns = skill_effect.get('turns', 3)
+            team = self.enemies if is_enemy else self.player_team
+            for ally in team:
+                if ally.is_alive:
+                    d = ally.add_status('attack_buff', turns)
+                    if d:
+                        d['value'] = int(atk_bonus * 100)
+                    d2 = ally.add_status('defense_buff', turns)
+                    if d2:
+                        d2['value'] = int(def_bonus * 100)
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，全体友方攻防提升!")
+
+        elif skill_type == 'shield_team':
+            team = self.enemies if is_enemy else self.player_team
+            alive = [u for u in team if u.is_alive]
+            targets_count = skill_effect.get('targets', 3) + self._gear_extra_targets(attacker)
+            hit = random.sample(alive, min(targets_count, len(alive)))
+            for u in hit:
+                sv = self._skill_scale(skill_effect.get('shield_value', 30), attacker, 0.4)
+                u.shield += sv
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，为 {len(hit)} 名友方提供护盾!")
+
+        elif skill_type == 'damage_burn':
+            base_damage = self._skill_scale(skill_effect.get('base_damage', 20), attacker, 0.5)
+            base_damage = self._apply_assassin_bonus(base_damage, attacker, target)
+            actual = target.take_damage(base_damage, attacker)
+            d = target.add_status('burn', 3)
+            if d:
+                d['max_hp_pct'] = 0.10
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，造成 {actual} 伤害并灼烧!")
+
+        elif skill_type == 'aoe_freeze':
+            team = self.enemies if is_enemy else self.player_team
+            for u in team:
+                if u.is_alive:
+                    u.add_status('freeze', 1)
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，全体冻结!")
+
+        elif skill_type == 'aoe_paralyze':
+            team = self.enemies if is_enemy else self.player_team
+            for u in team:
+                if u.is_alive:
+                    u.add_status('paralyze', 1)
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，全体麻痹!")
+
+        elif skill_type == 'aoe_fear':
+            team = self.enemies if is_enemy else self.player_team
+            for u in team:
+                if u.is_alive:
+                    u.action_bar = max(0, u.action_bar - skill_effect.get('bar_rewind', 20))
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，全体行动条倒退!")
+
+        elif skill_type == 'chaos_spray':
+            debuff = random.choice(['poison', 'paralyze', 'sleep', 'curse', 'confuse'])
+            d = target.add_status(debuff, 2, attacker.attack)
+            if d and debuff == 'poison':
+                d['stacks'] = d.get('stacks', 1) + 2
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，{target.name} 中了 {debuff}!")
+
+        elif skill_type == 'resurrect':
+            team = self.enemies if is_enemy else self.player_team
+            dead = [u for u in team if not u.is_alive]
+            if dead:
+                revived = random.choice(dead)
+                revived.is_alive = True
+                revived.current_health = int(revived.max_health * skill_effect.get('heal_pct', 0.3))
+                revived.shield = 0
+                self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，复活了 {revived.name}!")
+            else:
+                self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，但没有可复活的目标!")
+
+        elif skill_type == 'sacrifice_heal':
+            team = self.enemies if is_enemy else self.player_team
+            alive = [u for u in team if u.is_alive and u is not attacker]
+            cost = max(1, int(attacker.max_health * skill_effect.get('cost_pct', 0.20)))
+            attacker.take_damage(cost)
+            if alive:
+                t = min(alive, key=lambda u: u.current_health)
+                t.heal(int(attacker.max_health * skill_effect.get('heal_pct', 0.40)))
+                self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，献祭 {cost} 生命治疗 {t.name}!")
+
+        elif skill_type == 'missing_hp_damage':
+            missing = target.max_health - target.current_health
+            base_damage = self._skill_scale(skill_effect.get('base_damage', 15), attacker, 0.4)
+            total = base_damage + int(missing * skill_effect.get('missing_hp_pct', 0.20))
+            actual = target.take_damage(total, attacker)
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，造成 {actual} 伤害(基于已损失生命)!")
+
+        elif skill_type == 'cleanse_damage':
+            debuffs = [k for k in target.status_effects if k in ('poison', 'burn', 'bleed', 'freeze', 'curse', 'sleep', 'paralyze', 'confuse')]
+            dmg = self._skill_scale(skill_effect.get('base_damage', 20), attacker, 0.4)
+            dmg = int(dmg * (1 + 0.15 * len(debuffs)))
+            actual = target.take_damage(dmg, attacker)
+            for k in debuffs:
+                target.remove_status(k)
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，造成 {actual} 伤害并净化{len(debuffs)}个debuff!")
+
+        elif skill_type == 'blood_plague':
+            d = target.add_status('poison', 3, attacker.attack)
+            if d:
+                d['stacks'] = d.get('stacks', 1) + 1
+            d2 = target.add_status('bleed', 3)
+            if d2:
+                d2['max_hp_pct'] = 0.10
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，{target.name} 身染血疫!")
+
+        elif skill_type == 'banish':
+            if is_enemy and target.is_player:
+                gs = self.grid_size
+                free = [p for p in range(gs * gs) if p not in {u.position for u in self.player_team if u.is_alive}]
+                if free:
+                    pos = free[0]
+                    target.position = pos
+                    target.row = pos // gs
+                    target.col = pos % gs
+            self.add_log(f"【{name_prefix}{attacker.name}】释放技能 [{skill_name}]，放逐目标!")
+
         else:
             damage = attacker.attack
             damage = self._apply_assassin_bonus(damage, attacker, target)
@@ -4207,26 +4629,37 @@ class BattleSystem:
             child.id = f'{unit.id}_s{random.randint(1000, 9999)}'
         return child
 
+    def process_poison_on_action(self, unit):
+        """中毒：每层每回合（单位行动）开始时掉50血，随后层数-1"""
+        se = unit.status_effects
+        pdata = se.get('poison')
+        if pdata:
+            stacks = pdata.get('stacks', 1)
+            poison_mult = 1.0
+            for e in self.enemies:
+                if e.is_alive and 'poison_mastery' in getattr(e, 'passive_abilities', []):
+                    poison_mult = 2.0
+                    break
+            damage = int(50 * stacks * poison_mult)
+            unit.take_damage(damage)
+            self.add_log(f"  ☠ {unit.name} 中毒发作 ({stacks}层), 受到 {damage} 伤害")
+            stacks -= 1
+            if stacks <= 0:
+                se.pop('poison', None)
+            else:
+                pdata['stacks'] = stacks
+        hb = getattr(unit, '_heal_block_turns', 0)
+        if hb > 0:
+            hb -= 1
+            unit._heal_block_turns = hb
+            if hb <= 0:
+                unit._heal_block = False
+
     def update_status_damage(self):
-        poison_mult = 1.0
-        for e in self.enemies:
-            if e.is_alive and 'poison_mastery' in getattr(e, 'passive_abilities', []):
-                poison_mult = 2.0
-                break
         for unit in self._all_units_cache:
             if not unit.is_alive:
                 continue
             se = unit.status_effects
-            pdata = se.get('poison')
-            if pdata:
-                stacks = pdata.get('stacks', 1)
-                atk = pdata.get('attacker_attack', 0)
-                damage = int(stacks * (100 + 0.1 * atk) * poison_mult)
-                unit.take_damage(damage)
-                self.add_log(f"  ☠ {unit.name} 中毒发作 ({stacks}层), 受到 {damage} 伤害")
-                pdata['turns'] -= 1
-                if pdata['turns'] <= 0:
-                    se.pop('poison', None)
             bdata = se.get('burn')
             if bdata:
                 max_hp_pct = bdata.get('max_hp_pct', 0.15)

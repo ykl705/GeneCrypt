@@ -1008,6 +1008,31 @@ ACHIEVEMENTS = [
 # ==========================================
 EQUIPMENT_SLOTS = ['weapon', 'head', 'body', 'accessory', 'boots', 'special']
 EQUIPMENT_SLOT_NAMES = {'weapon':'武器','head':'头部','body':'躯干','accessory':'饰品','boots':'鞋子','special':'特殊'}
+
+# 每部位主属性池：主属性加成远大于小词条
+EQUIPMENT_MAIN_POOLS = {
+    'weapon': ['attack'],
+    'head': ['health', 'defense'],
+    'body': ['health', 'defense'],
+    'accessory': ['attack', 'critical_rate', 'dodge_rate'],
+    'boots': ['speed', 'health', 'dodge_rate'],
+    'special': ['attack', 'health', 'speed', 'critical_rate'],
+}
+# 主属性数值区间（按稀有度；health自动x5，百分比类转小数值）
+EQUIPMENT_MAIN_VALUES = {
+    'common': (15, 30), 'uncommon': (30, 60), 'rare': (60, 120),
+    'epic': (120, 250), 'legend': (250, 500), 'ancient': (500, 1000),
+    'mythic': (1000, 2000), 'chaos': (2000, 4000),
+}
+# 高品质装备的技能机制增强词条
+EQUIPMENT_SPECIALS = {
+    'epic': [('skill_dmg', 10, 25), ('extra_targets', 1, 1), ('status_duration', 1, 1), ('ignore_distance', 1, 1)],
+    'legend': [('skill_dmg', 20, 45), ('extra_targets', 1, 2), ('status_duration', 1, 2), ('ignore_distance', 1, 1)],
+    'ancient': [('skill_dmg', 35, 65), ('extra_targets', 1, 2), ('status_duration', 2, 2), ('ignore_distance', 1, 1)],
+    'mythic': [('skill_dmg', 50, 90), ('extra_targets', 2, 3), ('status_duration', 2, 3), ('ignore_distance', 1, 1)],
+    'chaos': [('skill_dmg', 80, 150), ('extra_targets', 3, 4), ('status_duration', 3, 4), ('ignore_distance', 1, 1)],
+}
+EQUIPMENT_SPECIAL_CHANCE = {'epic': 0.25, 'legend': 0.45, 'ancient': 0.6, 'mythic': 0.75, 'chaos': 0.95}
 EQUIPMENT_RARITY = [
     {'id':'common',   'name':'普通', 'color':(0.6,0.6,0.6,1), 'affixes':(1,2), 'prefix':'',  'drop':0.55},
     {'id':'uncommon', 'name':'精品', 'color':(0.2,0.8,0.2,1), 'affixes':(2,3), 'prefix':'精', 'drop':0.25},
@@ -1168,6 +1193,18 @@ EQUIPMENT_NAMES = {
 }
 
 # ==========================================
+# 技能分级 - 关卡随机掉落用（不含抽卡限定技能）
+# ==========================================
+SKILL_TIER_POOLS = {
+    1: ['火焰吐息', '冰霜护盾', '雷击', '毒液攻击', '自我修复', '能量护盾'],
+    2: ['快速生长', '甘霖', '幻觉制造', '瞬移', '睡眠诱导', '麻痹神经'],
+    3: ['能量吸收', '召唤', '隐身', '观星', '澎湃', '自爆'],
+    4: ['冻结', '诅咒', '灼烧', '处决', '毒雾扩散'],
+    5: ['时光倒流', '亡灵复苏'],
+}
+
+
+# ==========================================
 # 基建系统
 # ==========================================
 PVP_TIERS = [
@@ -1184,6 +1221,75 @@ PVP_TIER_SKILLS = [
     ['处决', '毒雾扩散', '时光倒流', '亡灵复苏', '剧毒新星', '炼狱之火', '血之渴望', '猩红风暴', '永冻领域', '状态共鸣'],
     ['剧毒新星', '炼狱之火', '永冻领域', '绝对零度', '血之渴望', '猩红风暴', '万象终结', '状态共鸣', '处决', '时光倒流'],
 ]
+
+# ==========================================
+# 装备名称扩充（追加到原有名字池）
+# ==========================================
+_EXTRA_EQUIP_NAMES = {
+    'weapon': {
+        'common': ['骨镰', '石刃', '木枪'],
+        'uncommon': ['锯齿剑', '回旋刃', '棘刺鞭'],
+        'rare': ['毒牙刃', '冰凌剑', '炎星刺', '风翼刃'],
+        'epic': ['苍狼之牙', '星陨之刃', '炎龙吐息'],
+        'legend': ['虚空·刃', '龙血·戟', '深渊·镰', '苍穹·枪'],
+        'ancient': ['时之刃', '界之枪', '星辰·斩舰刀'],
+        'mythic': ['万法·刃', '归墟·戟', '天命·圣剑'],
+        'chaos': ['✦虚无·刃✦', '✦终焉·枪✦', '✦混沌·镰✦'],
+    },
+    'head': {
+        'common': ['破布巾', '藤冠', '木盔'],
+        'uncommon': ['铜盔', '羽盔', '骨冠'],
+        'rare': ['风语兜帽', '冰晶额环', '炎纹头带'],
+        'epic': ['苍鹰之眼', '星轨之冠', '深海之冕'],
+        'legend': ['虚空·面甲', '龙魂·盔', '深渊·冠'],
+        'ancient': ['时之冠', '界之盔', '星辰·头环'],
+        'mythic': ['万法·冠', '归墟·盔', '天命·灵盔'],
+        'chaos': ['✦虚无·冠✦', '✦终焉·盔✦'],
+    },
+    'body': {
+        'common': ['麻布衣', '硬藤甲', '兽皮衣'],
+        'uncommon': ['铜鳞甲', '钉皮甲', '铁环甲'],
+        'rare': ['风纹轻甲', '冰棱战甲', '炎鳞衣'],
+        'epic': ['苍鳞之铠', '星辉战袍', '深海之鳞'],
+        'legend': ['虚空·鳞衣', '龙血·战甲', '深渊·骨铠'],
+        'ancient': ['时之衣', '界之铠', '星辰·圣衣'],
+        'mythic': ['万法·袍', '归墟·铠', '天命·神衣'],
+        'chaos': ['✦虚无·衣✦', '✦终焉·铠✦'],
+    },
+    'accessory': {
+        'common': ['木珠串', '贝壳链', '骨牌'],
+        'uncommon': ['铜铃', '兽牙链', '铁护符'],
+        'rare': ['风铃坠', '冰晶戒', '炎心石'],
+        'epic': ['苍鹰之羽', '星砂坠', '深海之珠'],
+        'legend': ['虚空·印', '龙魂·珠', '深渊·眼'],
+        'ancient': ['时之砂', '界之符', '星辰·轮'],
+        'mythic': ['万法·环', '归墟·珠', '天命·符'],
+        'chaos': ['✦虚无·环✦', '✦终焉·珠✦'],
+    },
+    'boots': {
+        'common': ['树皮鞋', '草绳鞋', '木板鞋'],
+        'uncommon': ['钉鞋', '皮绑腿', '藤靴'],
+        'rare': ['风行者', '冰径靴', '炎踏靴'],
+        'epic': ['苍狼疾行', '星步靴', '深海之鳍'],
+        'legend': ['虚空·履', '龙行·靴', '深渊·步'],
+        'ancient': ['时之靴', '界之履', '星辰·行空'],
+        'mythic': ['万法·靴', '归墟·履', '天命·疾风'],
+        'chaos': ['✦虚无·履✦', '✦终焉·靴✦'],
+    },
+    'special': {
+        'common': ['木雕', '石符', '羽毛'],
+        'uncommon': ['铜徽', '银铃', '骨笛'],
+        'rare': ['风之石', '冰之核', '炎之种'],
+        'epic': ['苍鹰之心', '星之碎片', '深海之息'],
+        'legend': ['虚空·核', '龙之逆鳞', '深渊·结晶'],
+        'ancient': ['时之尘', '界之种', '星辰·核心'],
+        'mythic': ['万法·源', '归墟·种', '天命·核心'],
+        'chaos': ['✦虚无·源✦', '✦终焉·核✦'],
+    },
+}
+for _slot, _rarities in _EXTRA_EQUIP_NAMES.items():
+    for _rar, _names in _rarities.items():
+        EQUIPMENT_NAMES.setdefault(_slot, {}).setdefault(_rar, []).extend(_names)
 
 BASE_BUILDINGS = [
     {'id':'gene_lab',    'name':'基因研究所', 'icon':'T', 'desc':'全局ATK+{bonus}%',     'per_lv':1, 'max_lv':10},
