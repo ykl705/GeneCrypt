@@ -36,6 +36,8 @@ class BattleScreen(Screen):
         controls.add_widget(self._start_btn)
         self._auto_btn = Button(text='自动', on_press=lambda _: self._toggle_auto())
         controls.add_widget(self._auto_btn)
+        self._speed_btn = Button(text='1x', size_hint_x=0.08, on_press=lambda _: self._toggle_speed())
+        controls.add_widget(self._speed_btn)
         self._infinity_btn = Button(text='无限模式', on_press=lambda _: self._start_infinity())
         self._infinity_btn.background_color = (0.4, 0.2, 0.6, 1)
         controls.add_widget(self._infinity_btn)
@@ -66,6 +68,7 @@ class BattleScreen(Screen):
         self._team = {}
         self._pending_card = None
         self._battle_mode = 'campaign'
+        self._speed_mult = 1
 
     def on_enter(self):
         if self._battle_running and self._battle_system:
@@ -540,9 +543,21 @@ class BattleScreen(Screen):
             pw = max(instance.width, 1)
             instance._fill.size = (instance._fill.size[0], instance.height)
 
+    def _toggle_speed(self):
+        speeds = [1, 2, 3, 4]
+        idx = speeds.index(getattr(self, '_speed_mult', 1))
+        self._speed_mult = speeds[(idx + 1) % len(speeds)]
+        self._speed_btn.text = f'{self._speed_mult}x'
+
     def _battle_tick(self, dt):
         if not self._battle_running:
             return False
+        for _ in range(max(1, getattr(self, '_speed_mult', 1))):
+            if not self._tick_once():
+                return False
+        return True
+
+    def _tick_once(self):
         try:
             bs = self._battle_system
             if bs is None or not bs.is_running:

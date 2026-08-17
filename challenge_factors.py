@@ -47,6 +47,8 @@ def _mk_enemy_data(bs, template_key, scale=1.0, skills=None, position=None, extr
     if not tmpl:
         return None
     hp_s, st_s = _scale_for_stage(bs.stage_num)
+    multi = template_key in ('overlord', 'void_overlord', 'abyss_lord', 'devourer',
+                             'void_dragon_god', 'mech_god', 'void_destroyer')
     data = {
         'name': tmpl['name'],
         'health': int(tmpl['base_health'] * hp_s * scale),
@@ -55,8 +57,8 @@ def _mk_enemy_data(bs, template_key, scale=1.0, skills=None, position=None, extr
         'speed': int(tmpl['base_speed'] * st_s * scale),
         'skills': skills if skills is not None else list(tmpl.get('skills_pool', [])[:max(1, tmpl.get('min_skills', 0))]),
         'passive_abilities': list(tmpl.get('passive_abilities', [])),
-        'width': tmpl.get('width', 1),
-        'height': tmpl.get('height', 1),
+        'width': 2 if multi else tmpl.get('width', 1),
+        'height': 2 if multi else tmpl.get('height', 1),
         'annihilate': tmpl.get('annihilate', False),
         'immune_to_debuffs': tmpl.get('immune_to_debuffs', False),
         'purify_interval': tmpl.get('purify_interval', 0),
@@ -361,6 +363,14 @@ def on_enemy_action(bs, enemy, result):
         return
     target = result.get('target_obj') if result else None
 
+    # 圣甲虫群繁殖：每次行动算一个回合
+    if 'swarm_reproduce' in ids or 'rapid_reproduce' in ids:
+        fs['swarm_actions'] = fs.get('swarm_actions', 0) + 1
+        interval = 1 if 'rapid_reproduce' in ids else 3
+        if fs['swarm_actions'] % interval == 0:
+            for e in [u for u in bs.enemies if u.is_alive and '圣甲虫' in u.name]:
+                _reproduce_swarm(bs, e)
+
     if 'void_corrosion' in ids:
         for p in bs.player_team:
             if p.is_alive:
@@ -607,14 +617,6 @@ def process_tick(bs):
         for p in bs.player_team:
             if p.is_alive:
                 p.add_status('poison', 3, 10)
-
-    if 'swarm_reproduce' in ids or 'rapid_reproduce' in ids:
-        fs['swarm_tick'] = fs.get('swarm_tick', 0) + 1
-        interval = 1 if 'rapid_reproduce' in ids else 3
-        if fs['swarm_tick'] >= interval:
-            fs['swarm_tick'] = 0
-            for e in [u for u in bs.enemies if u.is_alive and '圣甲虫' in u.name]:
-                _reproduce_swarm(bs, e)
 
     if 'bb_growth' in ids:
         for e in bs.enemies:

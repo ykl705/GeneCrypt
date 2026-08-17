@@ -49,7 +49,10 @@ class ChallengeScreen(Screen):
     def _build_theme_enemies(self, theme_id, stage_num, count=8):
         import random
         pool = self.THEME_ENEMY_POOLS.get(theme_id, ['basic', 'soldier', 'mutant', 'elite'])
-        keys = random.sample(pool, min(count, len(pool)))
+        boss_key = pool[-1]
+        normal_pool = pool[:-1]
+        keys = random.sample(normal_pool, min(max(count - 1, 1), len(normal_pool)))
+        keys.append(boss_key)
         class _Dummy:
             pass
         dummy = _Dummy()
